@@ -1,13 +1,17 @@
 [project]
 name = "mdpad"
 version = "0.1.0"
-description = "Add your description here"
+description = "Context-aware scientific writing environment (PoC)"
 readme = "README.md"
 authors = [
     { name = "neworldemancer", email = "neworldemancer@gmail.com" }
 ]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "fastapi>=0.140.13",
+    "httpx>=0.28.1",
+    "uvicorn[standard]>=0.51.0",
+]
 
 [project.scripts]
 mdpad = "mdpad:main"
@@ -15,3 +19,8 @@ mdpad = "mdpad:main"
 [build-system]
 requires = ["uv_build>=0.10.0,<0.11.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

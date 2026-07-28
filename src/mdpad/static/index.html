@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>mdpad</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="wordmark">mdpad<span class="spectrum-glyph" aria-hidden="true"></span></div>
+    <div class="breadcrumb" id="breadcrumb">representation-dynamics</div>
+    <div class="provider-status">
+      <span class="dot" id="provider-dot" aria-hidden="true"></span>
+      <button class="ghost" id="settings-toggle">Settings</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <nav class="sidebar" id="sidebar" aria-label="Document outline">
+      <div class="panel-label">Outline</div>
+      <ul class="outline" id="outline"></ul>
+
+      <form class="settings" id="settings" hidden>
+        <div class="panel-label">Provider</div>
+        <label>Base URL<input id="p-base" placeholder="https://api.openai.com/v1" /></label>
+        <label>API key<input id="p-key" type="password" placeholder="sk-…" /></label>
+        <label>Model<input id="p-model" placeholder="gpt-4o-mini" /></label>
+        <div class="settings-row">
+          <label>Temp<input id="p-temp" type="number" step="0.1" min="0" max="2" value="0.3" /></label>
+          <label>Max tokens<input id="p-max" type="number" min="1" value="1024" /></label>
+        </div>
+        <p class="hint">Stored in this browser only. Leave blank to use the offline mock.</p>
+      </form>
+    </nav>
+
+    <section class="editor-pane">
+      <div class="pane-head">
+        <span class="panel-label">Source</span>
+        <div class="actions">
+          <button class="act" data-act="rewrite">Rewrite</button>
+          <button class="act" data-act="expand">Expand</button>
+          <button class="act" data-act="shorten">Shorten</button>
+          <button class="act" data-act="custom">Custom…</button>
+        </div>
+      </div>
+      <textarea id="editor" spellcheck="false" aria-label="Markdown source"></textarea>
+    </section>
+
+    <section class="preview-pane">
+      <div class="pane-head"><span class="panel-label">Preview</span></div>
+      <article class="preview" id="preview"></article>
+    </section>
+  </main>
+
+  <footer class="dock" id="dock" hidden>
+    <div class="dock-head">
+      <span class="panel-label" id="dock-title">Context &amp; review</span>
+      <button class="ghost" id="dock-close">Close</button>
+    </div>
+    <div class="dock-body">
+      <div class="context-block">
+        <div class="context-head">
+          <span class="panel-label">Context sent to model</span>
+          <span class="total" id="ctx-total"></span>
+        </div>
+        <div class="spectrum" id="ctx-spectrum" aria-hidden="true"></div>
+        <ul class="ctx-legend" id="ctx-legend"></ul>
+      </div>
+      <div class="review-block" id="review-block">
+        <div class="status-line" id="status-line"></div>
+        <div class="diff">
+          <div class="diff-col"><span class="diff-label">Selected</span><pre id="diff-original"></pre></div>
+          <div class="diff-col"><span class="diff-label proposed">Proposed</span><pre id="diff-proposed"></pre></div>
+        </div>
+        <div class="decision">
+          <button class="accept" id="accept">Accept</button>
+          <button class="reject" id="reject">Reject</button>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <script defer src="/static/app.js"></script>
+</body>
+</html>
