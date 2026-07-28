@@ -6,10 +6,11 @@ request, so no secrets are stored server-side -- a deliberate PoC simplification
 
 from __future__ import annotations
 
+import re
 import webbrowser
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -27,7 +28,27 @@ _PROJECT_SUMMARY = (
     "Tone: precise, hypothesis-aware, mathematically careful."
 )
 
+# The manuscript served to the browser. Defaults to the bundled example; a file
+# path passed to `mdpad` (e.g. `uv run mdpad test.md`) replaces it at startup.
+_current_doc = _DEFAULT_DOC
+_current_name: str | None = None
+
+# Open/Save operate on Markdown files in the folder mdpad was launched from.
+DOCS_DIR = Path.cwd()
+_NAME_RE = re.compile(r"^[\w.\-]+\.md$")
+DEFAULT_PORT = 8670
+
 app = FastAPI(title="mdpad")
+
+
+def _safe_doc_path(name: str) -> Path:
+    """Resolve ``name`` to a .md file directly inside DOCS_DIR (no traversal)."""
+    if not _NAME_RE.match(name):
+        raise HTTPException(400, "Invalid filename (use letters, digits, . - _ and a .md extension).")
+    path = (DOCS_DIR / name).resolve()
+    if path.parent != DOCS_DIR.resolve():
+        raise HTTPException(400, "Filename must not point outside the documents folder.")
+    return path
 
 
 class ProviderSettings(BaseModel):
@@ -53,7 +74,39 @@ def index() -> FileResponse:
 
 @app.get("/api/document")
 def document() -> dict:
-    return {"text": _DEFAULT_DOC, "project_summary": _PROJECT_SUMMARY}
+    return {"text": _current_doc, "project_summary": _PROJECT_SUMMARY, "name": _current_name}
+
+
+@app.get("/api/files")
+def list_files() -> dict:
+    files = sorted(p.name for p in DOCS_DIR.glob("*.md") if p.is_file())
+    return {"dir": str(DOCS_DIR), "files": files, "current": _current_name}
+
+
+class SaveRequest(BaseModel):
+    name: str
+    text: str
+
+
+@app.get("/api/file/{name}")
+def read_file(name: str) -> dict:
+    global _current_doc, _current_name
+    path = _safe_doc_path(name)
+    if not path.is_file():
+        raise HTTPException(404, f"No such file in {DOCS_DIR}: {name}")
+    _current_doc = path.read_text(encoding="utf-8")
+    _current_name = name
+    return {"name": name, "text": _current_doc}
+
+
+@app.post("/api/file")
+def save_file(req: SaveRequest) -> dict:
+    global _current_doc, _current_name
+    path = _safe_doc_path(req.name)
+    path.write_text(req.text, encoding="utf-8")
+    _current_doc = req.text
+    _current_name = req.name
+    return {"ok": True, "name": req.name}
 
 
 @app.post("/api/revise")
@@ -89,13 +142,64 @@ def revise(req: ReviseRequest) -> dict:
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")
 
 
-def main() -> None:
-    """Launch the local server and open the workspace in a browser."""
-    import uvicorn
+def _free_port(preferred: int) -> int:
+    """Return ``preferred`` if bindable, else an OS-assigned free port."""
+    import socket
 
-    host, port = "127.0.0.1", 8000
+    for candidate in (preferred, 0):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("127.0.0.1", candidate))
+                return s.getsockname()[1]
+            except OSError:
+                continue
+    return preferred
+
+
+def _open_when_ready(url: str) -> None:
+    """Open the browser only once the server answers (avoids ERR_EMPTY_RESPONSE)."""
+    import time
+    import urllib.request
+
+    for _ in range(60):
+        try:
+            urllib.request.urlopen(url, timeout=0.5)
+            break
+        except Exception:
+            time.sleep(0.2)
     try:
-        webbrowser.open(f"http://{host}:{port}")
+        webbrowser.open(url)
     except Exception:
         pass
+
+
+def main() -> None:
+    """Launch the local server and open the workspace in a browser.
+
+    Usage: ``mdpad [FILE.md]`` -- an optional Markdown file to open instead of
+    the bundled example.
+    """
+    import sys
+    import threading
+
+    import uvicorn
+
+    global _current_doc, _current_name
+    paths = [a for a in sys.argv[1:] if not a.startswith("-")]
+    if paths:
+        target = Path(paths[0])
+        if target.is_file():
+            _current_doc = target.read_text(encoding="utf-8")
+            _current_name = target.name
+            print(f"mdpad: loaded {target}")
+        else:
+            print(f"mdpad: file not found, using the bundled example: {target}")
+
+    host = "127.0.0.1"
+    port = _free_port(DEFAULT_PORT)
+    url = f"http://{host}:{port}"
+    if port != DEFAULT_PORT:
+        print(f"mdpad: port {DEFAULT_PORT} busy, using {port}")
+    print(f"mdpad: serving on {url}")
+    threading.Thread(target=_open_when_ready, args=(url,), daemon=True).start()
     uvicorn.run(app, host=host, port=port, log_level="info")

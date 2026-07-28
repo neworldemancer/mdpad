@@ -11,3 +11,4 @@ wheels/
 
 # Tooling caches
 .pytest_cache/
+graphify-out/

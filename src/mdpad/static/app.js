@@ -8,6 +8,8 @@ const md = window.markdownit({ html: false, linkify: true, typographer: true });
 const editor = $("editor");
 const preview = $("preview");
 let pending = null; // { start, end } of the selection a proposal applies to
+let currentName = null; // filename of the open document, or null (unsaved example)
+let dirty = false; // true when the editor has unsaved changes
 
 const ACTIONS = {
   rewrite: "Rewrite the selected text more clearly while preserving meaning and all math.",
@@ -180,6 +182,72 @@ function accept() {
 
 function closeDock() { $("dock").hidden = true; pending = null; }
 
+// ---- file open/save ------------------------------------------------------
+function updateFilename() {
+  $("filename").textContent = currentName || "example (unsaved)";
+}
+
+async function refreshFiles() {
+  let data;
+  try {
+    data = await (await fetch("/api/files")).json();
+  } catch (e) {
+    return toast("Could not list files: " + e.message);
+  }
+  const sel = $("file-open");
+  sel.innerHTML = '<option value="" disabled selected>Open…</option>';
+  (data.files || []).forEach((name) => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    sel.appendChild(opt);
+  });
+  if (currentName) sel.value = currentName;
+}
+
+async function openFile(name) {
+  let data;
+  try {
+    const res = await fetch("/api/file/" + encodeURIComponent(name));
+    data = await res.json();
+    if (!res.ok) return toast("Open failed: " + (data.detail || res.statusText));
+  } catch (e) {
+    return toast("Open failed: " + e.message);
+  }
+  editor.value = data.text;
+  currentName = data.name;
+  dirty = false;
+  closeDock();
+  renderPreview(); buildOutline(); markActiveSection(); updateFilename();
+  toast("Opened " + name);
+}
+
+async function saveFile() {
+  let name = currentName;
+  if (!name) {
+    name = prompt("Save as (filename.md):", "untitled.md");
+    if (!name) return;
+    if (!name.endsWith(".md")) name += ".md";
+  }
+  let data;
+  try {
+    const res = await fetch("/api/file", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, text: editor.value }),
+    });
+    data = await res.json();
+    if (!res.ok || !data.ok) return toast("Save failed: " + (data.detail || res.statusText));
+  } catch (e) {
+    return toast("Save failed: " + e.message);
+  }
+  currentName = data.name;
+  dirty = false;
+  updateFilename();
+  await refreshFiles();
+  toast("Saved " + data.name);
+}
+
 // ---- helpers ------------------------------------------------------------
 function escapeHtml(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -212,9 +280,18 @@ $("settings-toggle").addEventListener("click", () => {
 $("accept").addEventListener("click", accept);
 $("reject").addEventListener("click", closeDock);
 $("dock-close").addEventListener("click", closeDock);
-editor.addEventListener("input", () => { scheduleRender(); buildOutline(); markActiveSection(); });
+editor.addEventListener("input", () => { dirty = true; scheduleRender(); buildOutline(); markActiveSection(); });
 editor.addEventListener("keyup", markActiveSection);
 editor.addEventListener("click", markActiveSection);
+$("file-open").addEventListener("change", (e) => {
+  const name = e.target.value;
+  if (dirty && !confirm("Discard unsaved changes?")) {
+    e.target.value = currentName || "";
+    return;
+  }
+  openFile(name);
+});
+$("save").addEventListener("click", saveFile);
 
 // ---- boot ---------------------------------------------------------------
 (async function boot() {
@@ -222,8 +299,13 @@ editor.addEventListener("click", markActiveSection);
   try {
     const doc = await (await fetch("/api/document")).json();
     editor.value = doc.text;
+    currentName = doc.name || null;
   } catch {
     editor.value = "# mdpad\n\nCould not load the example document.";
+    currentName = null;
   }
+  dirty = false;
+  updateFilename();
+  await refreshFiles();
   renderPreview(); buildOutline(); markActiveSection();
 })();
