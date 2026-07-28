@@ -5,6 +5,21 @@
 const $ = (id) => document.getElementById(id);
 const md = window.markdownit({ html: false, linkify: true, typographer: true });
 
+// Stamp each rendered block with its markdown source line range so the editor
+// selection and the preview can be kept in sync (block-level).
+function _injectLine(tokens, idx, options, env, slf) {
+  const t = tokens[idx];
+  if (t.map) {
+    t.attrSet("data-line-start", String(t.map[0]));
+    t.attrSet("data-line-end", String(t.map[1]));
+  }
+  return slf.renderToken(tokens, idx, options);
+}
+["paragraph_open", "heading_open", "blockquote_open", "bullet_list_open",
+ "ordered_list_open", "list_item_open", "table_open"].forEach((rule) => {
+  md.renderer.rules[rule] = _injectLine;
+});
+
 const editor = $("editor");
 const preview = $("preview");
 let pending = null; // { start, end } of the selection a proposal applies to
@@ -34,6 +49,7 @@ let renderTimer = null;
 function renderPreview() {
   preview.innerHTML = md.render(editor.value);
   renderMath();
+  syncFromEditor(false);
 }
 function scheduleRender() {
   clearTimeout(renderTimer);
@@ -84,33 +100,108 @@ function markActiveSection() {
   if (active) $("breadcrumb").textContent = active.textContent.trim().toLowerCase().replace(/\s+/g, "-");
 }
 
-// ---- provider settings (localStorage) ----------------------------------
+// ---- editor <-> preview block sync -------------------------------------
+function _lineOf(pos) {
+  return editor.value.slice(0, Math.max(0, pos)).split("\n").length - 1;
+}
+
+// Highlight the preview block(s) overlapping the editor's current selection.
+function syncFromEditor(scroll) {
+  const a = _lineOf(editor.selectionStart), b = _lineOf(editor.selectionEnd);
+  let first = null;
+  preview.querySelectorAll("[data-line-start]").forEach((el) => {
+    const s = +el.getAttribute("data-line-start"), e = +el.getAttribute("data-line-end");
+    const hit = s <= b && e > a;             // block range [s,e) overlaps [a,b]
+    el.classList.toggle("sync-hl", hit);
+    if (hit && !first) first = el;
+  });
+  if (first && scroll) first.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+// Click a preview block -> select its source lines in the editor.
+function selectSourceLines(el) {
+  const s = +el.getAttribute("data-line-start"), e = +el.getAttribute("data-line-end");
+  const lines = editor.value.split("\n").length;
+  const from = lineStartOffset(s);
+  const to = e >= lines ? editor.value.length : lineStartOffset(e) - 1;
+  editor.focus();
+  editor.setSelectionRange(from, Math.max(from, to));
+  syncFromEditor(true);
+}
+
+// ---- provider settings (localStorage + server .env) --------------------
+let serverHasKey = false; // true when the backend holds an API key (.env)
+let savedModel = "";      // model id from localStorage, applied once models load
+
 function loadSettings() {
   const s = JSON.parse(localStorage.getItem("mdpad.provider") || "{}");
   $("p-base").value = s.base_url || "";
   $("p-key").value = s.api_key || "";
-  $("p-model").value = s.model || "";
+  savedModel = s.model || "";
   $("p-temp").value = s.temperature ?? 0.3;
   $("p-max").value = s.max_tokens ?? 1024;
-  refreshProviderDot();
 }
 function readSettings() {
   return {
     base_url: $("p-base").value.trim(),
     api_key: $("p-key").value.trim(),
-    model: $("p-model").value.trim(),
+    model: $("p-model").value,
     temperature: parseFloat($("p-temp").value) || 0.3,
     max_tokens: parseInt($("p-max").value, 10) || 1024,
   };
 }
 function saveSettings() {
-  const s = readSettings();
-  localStorage.setItem("mdpad.provider", JSON.stringify(s));
+  localStorage.setItem("mdpad.provider", JSON.stringify(readSettings()));
   refreshProviderDot();
 }
 function refreshProviderDot() {
   const s = readSettings();
-  $("provider-dot").classList.toggle("live", !!(s.base_url && s.api_key && s.model));
+  // "live" when a model is chosen and a key exists (server .env or user-supplied)
+  $("provider-dot").classList.toggle("live", !!(s.model && (serverHasKey || s.api_key)));
+}
+
+// Fetch the model list from the backend (which uses the server .env key by
+// default, or the base URL / key the user typed) and fill the dropdown.
+async function fetchModels() {
+  const sel = $("p-model");
+  const qs = new URLSearchParams();
+  const base = $("p-base").value.trim();
+  const key = $("p-key").value.trim();
+  if (base) qs.set("base_url", base);
+  if (key) qs.set("api_key", key);
+  let data;
+  try {
+    data = await (await fetch("/api/models?" + qs.toString())).json();
+  } catch (e) {
+    return toast("Model list failed: " + e.message);
+  }
+  serverHasKey = data.has_key;
+  sel.innerHTML = "";
+  const ids = data.models || [];
+  if (!ids.length) {
+    const o = document.createElement("option");
+    o.value = ""; o.textContent = data.error ? "(no models)" : "(none)";
+    sel.appendChild(o);
+    if (data.error) toast("Models: " + data.error);
+  } else {
+    ids.forEach((id) => {
+      const o = document.createElement("option");
+      o.value = id; o.textContent = id;
+      sel.appendChild(o);
+    });
+    sel.value = savedModel && ids.includes(savedModel) ? savedModel : ids[0];
+  }
+  saveSettings();
+}
+
+// Prefill the base URL from the server default, then load models.
+async function initProvider() {
+  try {
+    const cfg = await (await fetch("/api/config")).json();
+    serverHasKey = cfg.has_key;
+    if (!$("p-base").value.trim()) $("p-base").value = cfg.base_url || "";
+  } catch { /* keep whatever is in localStorage */ }
+  await fetchModels();
 }
 
 // ---- revise flow --------------------------------------------------------
@@ -274,15 +365,29 @@ document.querySelectorAll(".act").forEach((btn) =>
 $("settings-toggle").addEventListener("click", () => {
   $("settings").hidden = !$("settings").hidden;
 });
-["p-base", "p-key", "p-model", "p-temp", "p-max"].forEach((id) =>
+["p-model", "p-temp", "p-max"].forEach((id) =>
   $(id).addEventListener("change", saveSettings)
 );
+// Changing the endpoint/key re-lists models against it.
+["p-base", "p-key"].forEach((id) =>
+  $(id).addEventListener("change", () => { saveSettings(); fetchModels(); })
+);
+$("p-refresh").addEventListener("click", fetchModels);
 $("accept").addEventListener("click", accept);
 $("reject").addEventListener("click", closeDock);
 $("dock-close").addEventListener("click", closeDock);
 editor.addEventListener("input", () => { dirty = true; scheduleRender(); buildOutline(); markActiveSection(); });
 editor.addEventListener("keyup", markActiveSection);
 editor.addEventListener("click", markActiveSection);
+// block-level selection sync: highlight on any selection change, scroll on mouseup
+document.addEventListener("selectionchange", () => {
+  if (document.activeElement === editor) syncFromEditor(false);
+});
+editor.addEventListener("mouseup", () => syncFromEditor(true));
+preview.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-line-start]");
+  if (el) selectSourceLines(el);
+});
 $("file-open").addEventListener("change", (e) => {
   const name = e.target.value;
   if (dirty && !confirm("Discard unsaved changes?")) {
@@ -307,5 +412,6 @@ $("save").addEventListener("click", saveFile);
   dirty = false;
   updateFilename();
   await refreshFiles();
+  await initProvider();
   renderPreview(); buildOutline(); markActiveSection();
 })();

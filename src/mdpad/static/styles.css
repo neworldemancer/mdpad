@@ -130,11 +130,12 @@ body {
 /* ---- settings --------------------------------------------------------- */
 .settings { margin-top: 22px; display: grid; gap: 10px; }
 .settings label { display: grid; gap: 4px; font-size: 11px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .06em; }
-.settings input {
+.settings input, .settings select {
   font-family: var(--font-mono); font-size: 12px;
   padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px;
-  background: var(--paper); color: var(--ink);
+  background: var(--paper); color: var(--ink); width: 100%;
 }
+#p-refresh { justify-self: start; padding: 4px 8px; font-size: 11px; }
 .settings-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .hint { font-size: 11px; color: var(--ink-soft); margin: 2px 0 0; line-height: 1.4; }
 
@@ -178,6 +179,8 @@ body {
 .preview h2 { font-family: var(--font-ui); font-weight: 600; font-size: 19px; margin: 1.4em 0 .4em; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
 .preview h3 { font-family: var(--font-ui); font-weight: 600; font-size: 15px; margin: 1.2em 0 .3em; }
 .preview p { margin: 0 0 .9em; }
+.preview [data-line-start] { cursor: pointer; transition: background .12s; }
+.preview .sync-hl { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); border-radius: 2px; }
 .preview code { font-family: var(--font-mono); font-size: .88em; background: var(--accent-soft); padding: 1px 4px; border-radius: 4px; }
 
 /* ---- dock (context + review) ----------------------------------------- */

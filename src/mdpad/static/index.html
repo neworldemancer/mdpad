@@ -35,13 +35,15 @@
       <form class="settings" id="settings" hidden>
         <div class="panel-label">Provider</div>
         <label>Base URL<input id="p-base" placeholder="https://api.openai.com/v1" /></label>
-        <label>API key<input id="p-key" type="password" placeholder="sk-…" /></label>
-        <label>Model<input id="p-model" placeholder="gpt-4o-mini" /></label>
+        <label>API key<input id="p-key" type="password" placeholder="using server .env key" /></label>
+        <label>Model<select id="p-model"></select></label>
+        <button type="button" class="ghost" id="p-refresh">↻ Refresh models</button>
         <div class="settings-row">
           <label>Temp<input id="p-temp" type="number" step="0.1" min="0" max="2" value="0.3" /></label>
           <label>Max tokens<input id="p-max" type="number" min="1" value="1024" /></label>
         </div>
-        <p class="hint">Stored in this browser only. Leave blank to use the offline mock.</p>
+        <p class="hint">Base URL &amp; models load from the server; the API key comes from
+          <code>.env</code> — leave the key blank to use it. Blank base URL + key → offline mock.</p>
       </form>
     </nav>
 

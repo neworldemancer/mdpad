@@ -1,15 +1,20 @@
-"""FastAPI application: serves the single-page workspace and two JSON endpoints.
+"""FastAPI application: serves the single-page workspace and its JSON endpoints.
 
-Provider settings live in the browser (localStorage) and travel with each revise
-request, so no secrets are stored server-side -- a deliberate PoC simplification.
+Provider config lives in the browser (localStorage) and travels with each revise
+request. The API key can also be supplied server-side via a ``.env`` file
+(``GPUSTACK_TEST_API_KEY``) so it is never exposed to client code; the browser
+then only picks a model. A blank field in a request falls back to the server
+default (base URL + key).
 """
 
 from __future__ import annotations
 
+import os
 import re
 import webbrowser
 from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -18,6 +23,12 @@ from pydantic import BaseModel, Field
 from . import context as ctx
 from . import provider as prov
 from .sections import parse_sections, section_at
+
+load_dotenv()
+# Server-side provider defaults. The key is read from .env and never sent to the
+# browser; base URL defaults to the GPUStack endpoint but is overridable per-request.
+SERVER_API_KEY = os.getenv("GPUSTACK_TEST_API_KEY", "")
+SERVER_BASE_URL = (os.getenv("MDPAD_BASE_URL") or "https://api.openai.com/v1").rstrip("/")
 
 _HERE = Path(__file__).parent
 _STATIC = _HERE / "static"
@@ -67,6 +78,14 @@ class ReviseRequest(BaseModel):
     provider: ProviderSettings = Field(default_factory=ProviderSettings)
 
 
+def _effective_provider(p: ProviderSettings) -> dict:
+    """Fill blank base URL / API key from the server-side defaults (.env)."""
+    d = p.model_dump()
+    d["base_url"] = d.get("base_url") or SERVER_BASE_URL
+    d["api_key"] = d.get("api_key") or SERVER_API_KEY
+    return d
+
+
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(_STATIC / "index.html")
@@ -75,6 +94,24 @@ def index() -> FileResponse:
 @app.get("/api/document")
 def document() -> dict:
     return {"text": _current_doc, "project_summary": _PROJECT_SUMMARY, "name": _current_name}
+
+
+@app.get("/api/config")
+def provider_config() -> dict:
+    """Non-secret provider defaults for the UI (never returns the key itself)."""
+    return {"base_url": SERVER_BASE_URL, "has_key": bool(SERVER_API_KEY)}
+
+
+@app.get("/api/models")
+def list_models_endpoint(base_url: str = "", api_key: str = "") -> dict:
+    """Fetch the OpenAI-compatible model list. Blank args use the server defaults."""
+    bu = (base_url or SERVER_BASE_URL).rstrip("/")
+    ak = api_key or SERVER_API_KEY
+    try:
+        models = prov.list_models(base_url=bu, api_key=ak)
+        return {"models": models, "base_url": bu, "has_key": bool(ak), "error": None}
+    except prov.ProviderError as e:
+        return {"models": [], "base_url": bu, "has_key": bool(ak), "error": str(e)}
 
 
 @app.get("/api/files")
@@ -127,7 +164,7 @@ def revise(req: ReviseRequest) -> dict:
             package_text=package.as_prompt(),
             selection=selection,
             instruction=req.instruction,
-            provider=req.provider.model_dump(),
+            provider=_effective_provider(req.provider),
         )
     except prov.ProviderError as e:
         error = str(e)

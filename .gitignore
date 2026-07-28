@@ -9,6 +9,9 @@ wheels/
 # Virtual environments
 .venv
 
+# Secrets
+.env
+
 # Tooling caches
 .pytest_cache/
 graphify-out/

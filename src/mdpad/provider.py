@@ -49,6 +49,26 @@ def _mock(selection: str, instruction: str) -> Proposal:
     )
 
 
+def list_models(*, base_url: str, api_key: str, timeout: float = 15) -> list[str]:
+    """Return sorted model ids from an OpenAI-compatible ``GET /models`` endpoint."""
+    base_url = (base_url or "").rstrip("/")
+    if not (base_url and api_key):
+        raise ProviderError("Base URL and API key are required to list models.")
+    try:
+        resp = httpx.get(
+            f"{base_url}/models",
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        data = resp.json().get("data", [])
+    except httpx.HTTPError as e:
+        raise ProviderError(f"Model-list request failed: {e}") from e
+    except (KeyError, TypeError, ValueError) as e:
+        raise ProviderError(f"Unexpected model-list response: {e}") from e
+    return sorted(m["id"] for m in data if isinstance(m, dict) and m.get("id"))
+
+
 def revise(*, package_text: str, selection: str, instruction: str, provider: dict) -> Proposal:
     base_url = (provider.get("base_url") or "").rstrip("/")
     api_key = provider.get("api_key") or ""
