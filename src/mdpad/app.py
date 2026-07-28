@@ -78,12 +78,19 @@ class ReviseRequest(BaseModel):
     provider: ProviderSettings = Field(default_factory=ProviderSettings)
 
 
-def _effective_provider(p: ProviderSettings) -> dict:
-    """Fill blank base URL / API key from the server-side defaults (.env)."""
-    d = p.model_dump()
-    d["base_url"] = d.get("base_url") or SERVER_BASE_URL
-    d["api_key"] = d.get("api_key") or SERVER_API_KEY
-    return d
+def _resolve_endpoint(base_url: str, api_key: str) -> tuple[str, str]:
+    """Resolve (base_url, api_key) without ever leaking the server key.
+
+    The server-side .env key is only ever paired with the server's own base URL.
+    A caller-supplied custom base URL must bring its own key -- otherwise a
+    forged request (e.g. ?base_url=http://attacker/) could exfiltrate the key.
+    """
+    bu = (base_url or SERVER_BASE_URL).rstrip("/")
+    if bu == SERVER_BASE_URL:
+        return bu, (api_key or SERVER_API_KEY)
+    if not api_key:
+        raise ValueError("A custom base URL requires its own API key.")
+    return bu, api_key
 
 
 @app.get("/")
@@ -106,12 +113,12 @@ def provider_config() -> dict:
 def list_models_endpoint(base_url: str = "", api_key: str = "") -> dict:
     """Fetch the OpenAI-compatible model list. Blank args use the server defaults."""
     bu = (base_url or SERVER_BASE_URL).rstrip("/")
-    ak = api_key or SERVER_API_KEY
     try:
+        _, ak = _resolve_endpoint(base_url, api_key)
         models = prov.list_models(base_url=bu, api_key=ak)
         return {"models": models, "base_url": bu, "has_key": bool(ak), "error": None}
-    except prov.ProviderError as e:
-        return {"models": [], "base_url": bu, "has_key": bool(ak), "error": str(e)}
+    except (ValueError, prov.ProviderError) as e:
+        return {"models": [], "base_url": bu, "has_key": bool(api_key), "error": str(e)}
 
 
 @app.get("/api/files")
@@ -160,13 +167,15 @@ def revise(req: ReviseRequest) -> dict:
     proposal = None
     error = None
     try:
+        d = req.provider.model_dump()
+        d["base_url"], d["api_key"] = _resolve_endpoint(d.get("base_url", ""), d.get("api_key", ""))
         proposal = prov.revise(
             package_text=package.as_prompt(),
             selection=selection,
             instruction=req.instruction,
-            provider=_effective_provider(req.provider),
+            provider=d,
         )
-    except prov.ProviderError as e:
+    except (ValueError, prov.ProviderError) as e:
         error = str(e)
     return {
         "section": section.title if section else None,
