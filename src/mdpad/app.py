@@ -93,6 +93,14 @@ def _resolve_endpoint(base_url: str, api_key: str) -> tuple[str, str]:
     return bu, api_key
 
 
+# Model ids whose names indicate a non-chat model (won't work with /chat/completions).
+_NON_CHAT_HINTS = ("whisper", "embedding", "rerank", "-tts", "-stt")
+
+
+def _chat_models(ids: list[str]) -> list[str]:
+    return [m for m in ids if not any(h in m.lower() for h in _NON_CHAT_HINTS)]
+
+
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(_STATIC / "index.html")
@@ -115,7 +123,7 @@ def list_models_endpoint(base_url: str = "", api_key: str = "") -> dict:
     bu = (base_url or SERVER_BASE_URL).rstrip("/")
     try:
         _, ak = _resolve_endpoint(base_url, api_key)
-        models = prov.list_models(base_url=bu, api_key=ak)
+        models = _chat_models(prov.list_models(base_url=bu, api_key=ak))
         return {"models": models, "base_url": bu, "has_key": bool(ak), "error": None}
     except (ValueError, prov.ProviderError) as e:
         return {"models": [], "base_url": bu, "has_key": bool(api_key), "error": str(e)}

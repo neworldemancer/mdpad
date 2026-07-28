@@ -94,6 +94,9 @@ def revise(*, package_text: str, selection: str, instruction: str, provider: dic
         )
         resp.raise_for_status()
         content = resp.json()["choices"][0]["message"]["content"]
+    except httpx.HTTPStatusError as e:
+        detail = e.response.text.strip().replace("\n", " ")[:300]
+        raise ProviderError(f"Provider {e.response.status_code}: {detail or e}") from e
     except httpx.HTTPError as e:
         raise ProviderError(f"Provider request failed: {e}") from e
     except (KeyError, IndexError, TypeError) as e:
@@ -102,9 +105,19 @@ def revise(*, package_text: str, selection: str, instruction: str, provider: dic
     return _validate(content)
 
 
+def _extract_json(content: str) -> str:
+    """Pull the JSON object out of a model reply that may wrap it in a
+    ``<think>`` reasoning block, markdown fences, or surrounding prose."""
+    s = content
+    if "</think>" in s:
+        s = s.rsplit("</think>", 1)[1]
+    i, j = s.find("{"), s.rfind("}")
+    return s[i:j + 1] if i != -1 and j > i else s.strip()
+
+
 def _validate(content: str) -> Proposal:
     try:
-        data = json.loads(content)
+        data = json.loads(_extract_json(content))
     except json.JSONDecodeError as e:
         raise ProviderError(f"Model did not return valid JSON: {e}") from e
     if not isinstance(data, dict) or "replacement_text" not in data:
