@@ -283,6 +283,39 @@ def estimate(sections: list[Section], blocks: list[Block], mode: str) -> dict:
     return {"count": count, "est_tokens": tokens}
 
 
-def status(sections: list[Section], blocks: list[Block]) -> dict:
-    summarized = sum(1 for s in sections if s.id in _STORE) + sum(1 for b in blocks if b.id in _STORE)
-    return {"summarized": summarized, "total": len(sections) + len(blocks)}
+def _state(cached: Summary | None, current_text: str, now: float) -> str:
+    """valid | stale | expired | missing for one cached unit vs its current text."""
+    if cached is None:
+        return "missing"
+    if cached.source_text == current_text:
+        return "valid"
+    return "stale" if (now - cached.generated_at) <= STALE_AFTER_S else "expired"
+
+
+def validity(sections: list[Section], blocks: list[Block], whole_text: str = "",
+             store: dict[str, Summary] | None = None, now: float | None = None) -> dict[str, str]:
+    """Map each unit id (sections, blocks, and ``__doc__`` when ``whole_text`` is
+    given) to its validity state: ``valid`` | ``stale`` | ``expired`` | ``missing``."""
+    store = _STORE if store is None else store
+    now = time.time() if now is None else now
+    out: dict[str, str] = {}
+    if whole_text:
+        out[DOC_ID] = _state(store.get(DOC_ID), whole_text, now)
+    for s in sections:
+        out[s.id] = _state(store.get(s.id), s.text, now)
+    for b in blocks:
+        out[b.id] = _state(store.get(b.id), b.text, now)
+    return out
+
+
+def status(sections: list[Section], blocks: list[Block], whole_text: str = "") -> dict:
+    v = validity(sections, blocks, whole_text)
+    ids = [s.id for s in sections] + [b.id for b in blocks]
+    counts = {"valid": 0, "stale": 0, "expired": 0, "missing": 0}
+    for uid in ids:
+        counts[v.get(uid, "missing")] += 1
+    return {
+        "summarized": sum(1 for uid in ids if uid in _STORE),
+        "total": len(ids),
+        **counts,
+    }

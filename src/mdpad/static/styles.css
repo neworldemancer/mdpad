@@ -92,9 +92,18 @@ body {
 /* ---- workspace grid --------------------------------------------------- */
 .workspace {
   display: grid;
-  grid-template-columns: var(--w-sidebar, 232px) 6px var(--w-editor, 1fr) 6px 1fr;
+  grid-template-columns: var(--w-sidebar, 232px) 6px var(--w-editor, 1fr) 6px 1fr var(--w-map, 0);
   min-height: 0;
 }
+
+/* right-hand summary-context panel (collapses to 0 width when closed) */
+.context-map { overflow-y: auto; min-width: 0; background: var(--surface); border-left: 1px solid var(--line); }
+.map-head { padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-soft); }
+.map-counts { padding: 7px 14px; border-bottom: 1px solid var(--line); font-family: var(--font-mono); font-size: 11px; color: var(--ink-soft); }
+.map-row { padding: 8px 14px; border-bottom: 1px solid var(--line); }
+.map-label { font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--accent); margin-bottom: 3px; }
+.map-text { font-size: 12px; line-height: 1.45; color: var(--ink); white-space: pre-wrap; word-break: break-word; }
+.map-text.current { font-family: var(--font-mono); font-size: 11.5px; }
 
 /* draggable dividers between panes */
 .gutter { background: var(--line); cursor: col-resize; }
@@ -268,7 +277,7 @@ body {
   font-family: var(--font-ui); font-size: 12px;
   background: none; border: 0; color: var(--ink-soft); cursor: pointer; padding: 4px 6px;
 }
-.ghost:hover { color: var(--accent); }
+.ghost:hover, .ghost.on { color: var(--accent); }
 
 .toast {
   position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
@@ -283,7 +292,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, .outline li:f
 @media (max-width: 900px) {
   .workspace { grid-template-columns: 1fr; grid-auto-rows: minmax(180px, auto); }
   .sidebar, .editor-pane { border-bottom: 1px solid var(--line); }
-  .gutter { display: none; }
+  .gutter, .context-map { display: none; }
   .dock-body { grid-template-columns: 1fr; }
   .context-block { border-right: 0; border-bottom: 1px solid var(--line); }
 }

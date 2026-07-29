@@ -485,6 +485,53 @@ function toast(msg) {
 }
 function hideToast() { $("toast").hidden = true; }
 
+// ---- summary-context panel ---------------------------------------------
+let mapOpen = localStorage.getItem("mdpad.mapOpen") === "1";
+let mapTimer = null;
+
+function setMap(open) {
+  mapOpen = open;
+  localStorage.setItem("mdpad.mapOpen", open ? "1" : "0");
+  document.querySelector(".workspace").style.setProperty("--w-map", open ? "300px" : "0");
+  $("map-toggle").classList.toggle("on", open);
+  if (open) refreshContextMap();
+}
+function scheduleMap() {
+  if (!mapOpen) return;
+  clearTimeout(mapTimer);
+  mapTimer = setTimeout(refreshContextMap, 250);
+}
+async function refreshContextMap() {
+  if (!mapOpen) return;
+  let data;
+  try {
+    const res = await fetch("/api/context/map", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: editor.value, offset: editor.selectionStart }),
+    });
+    data = await res.json();
+  } catch { return; }
+  const el = $("context-map");
+  el.innerHTML = "";
+  const head = document.createElement("div");
+  head.className = "map-head"; head.textContent = "Context hierarchy";
+  el.appendChild(head);
+  const c = data.counts || {};
+  const counts = document.createElement("div");
+  counts.className = "map-counts";
+  counts.textContent = `valid ${c.valid || 0} · stale ${(c.stale || 0) + (c.expired || 0)} · missing ${c.missing || 0}`;
+  el.appendChild(counts);
+  (data.items || []).forEach((it) => {
+    const row = document.createElement("div"); row.className = "map-row";
+    const label = document.createElement("div"); label.className = "map-label"; label.textContent = it.label;
+    const text = document.createElement("div");
+    text.className = "map-text" + (it.label === "Current paragraph" ? " current" : "");
+    text.textContent = it.text;
+    row.appendChild(label); row.appendChild(text);
+    el.appendChild(row);
+  });
+}
+
 // ---- wiring -------------------------------------------------------------
 document.querySelectorAll(".act").forEach((btn) =>
   btn.addEventListener("click", () => {
@@ -511,12 +558,13 @@ $("p-refresh").addEventListener("click", fetchModels);
 $("accept").addEventListener("click", accept);
 $("reject").addEventListener("click", closeDock);
 $("dock-close").addEventListener("click", closeDock);
-editor.addEventListener("input", () => { dirty = true; scheduleRender(); buildOutline(); markActiveSection(); });
+editor.addEventListener("input", () => { dirty = true; scheduleRender(); buildOutline(); markActiveSection(); scheduleMap(); });
+$("map-toggle").addEventListener("click", () => setMap(!mapOpen));
 editor.addEventListener("keyup", markActiveSection);
 editor.addEventListener("click", markActiveSection);
 // block-level selection sync: highlight on any selection change, scroll on mouseup
 document.addEventListener("selectionchange", () => {
-  if (document.activeElement === editor) syncFromEditor(false);
+  if (document.activeElement === editor) { syncFromEditor(false); scheduleMap(); }
 });
 editor.addEventListener("mouseup", () => syncFromEditor(true));
 preview.addEventListener("click", (e) => {
@@ -558,6 +606,7 @@ $("regen-summaries").addEventListener("click", regenerateSummaries);
   await initProvider();
   renderPreview(); buildOutline(); markActiveSection();
   refreshSummaryStatus();
+  setMap(mapOpen);
   setInterval(autosaveTick, 30000);
   setInterval(summaryTick, 600000);
 })();

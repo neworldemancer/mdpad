@@ -99,6 +99,11 @@ class SummariesStatusRequest(BaseModel):
     text: str = ""
 
 
+class ContextMapRequest(BaseModel):
+    text: str
+    offset: int = 0
+
+
 def _resolve_endpoint(base_url: str, api_key: str) -> tuple[str, str]:
     """Resolve (base_url, api_key) without ever leaking the server key.
 
@@ -250,7 +255,30 @@ def summaries_status(req: SummariesStatusRequest) -> dict:
     text = req.text or _current_doc
     sections = parse_sections(text)
     blocks = parse_blocks(text)
-    return summ.status(sections, blocks)
+    return summ.status(sections, blocks, text)
+
+
+@app.post("/api/context/map")
+def context_map(req: ContextMapRequest) -> dict:
+    """The summary hierarchy for the paragraph at ``offset`` (no LLM): the same
+    items build_context assembles, plus per-unit validity and counts."""
+    sections = parse_sections(req.text)
+    blocks = parse_blocks(req.text)
+    target = block_at(blocks, req.offset, req.text)
+    package = ctx.build_context(
+        project_summary=_PROJECT_SUMMARY,
+        sections=sections,
+        blocks=blocks,
+        target_block=target,
+        selection="",
+        instruction="",
+        store=summ._STORE,
+    )
+    return {
+        "items": package.as_dict()["items"],
+        "counts": summ.status(sections, blocks, req.text),
+        "current": target.id if target else None,
+    }
 
 
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")

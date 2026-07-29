@@ -197,7 +197,10 @@ def test_refresh_without_configured_provider_is_graceful(monkeypatch):
 
     assert result["generated"] == 0
     assert result["error"]
-    assert summaries.status(secs, blocks) == {"summarized": 0, "total": len(secs) + len(blocks)}
+    st = summaries.status(secs, blocks)
+    assert st["summarized"] == 0
+    assert st["total"] == len(secs) + len(blocks)
+    assert st["missing"] == len(secs) + len(blocks)
 
 
 def test_refresh_unknown_mode_reports_error(monkeypatch):
@@ -297,3 +300,26 @@ def test_refresh_invalidated_provider_error_is_captured(monkeypatch):
     monkeypatch.setattr(summaries.prov, "chat_text", _raise)
     result = summaries.refresh(new_secs, new_blocks, new_doc, PROVIDER, "invalidated")
     assert result["error"] == "boom"
+
+
+def test_validity_states():
+    import time
+
+    from mdpad.summaries import Summary
+
+    doc = "# A\n\npara one.\n\n## B\npara two."
+    secs = parse_sections(doc)
+    blocks = parse_blocks(doc)
+    a = next(s for s in secs if s.title == "A")
+    b = next(s for s in secs if s.title == "B")
+    now = time.time()
+    summaries._STORE.clear()
+    summaries._STORE[a.id] = Summary(a.id, "A", "s", a.text, now)             # unchanged
+    summaries._STORE[b.id] = Summary(b.id, "B", "s", "OLD", now)             # changed, fresh
+    v = summaries.validity(secs, blocks, doc)
+    assert v[a.id] == "valid"
+    assert v[b.id] == "stale"
+    assert v[blocks[0].id] == "missing"
+    summaries._STORE[b.id] = Summary(b.id, "B", "s", "OLD", now - 10_000)    # changed, old
+    assert summaries.validity(secs, blocks, doc)[b.id] == "expired"
+    summaries._STORE.clear()
