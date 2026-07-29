@@ -84,13 +84,12 @@
         </div>
         <div class="spectrum" id="ctx-spectrum" aria-hidden="true"></div>
         <ul class="ctx-legend" id="ctx-legend"></ul>
-        <details class="prompt-view">
-          <summary>Full prompt sent</summary>
-          <pre id="prompt-full"></pre>
-        </details>
       </div>
       <div class="review-block" id="review-block">
         <div class="status-line" id="status-line"></div>
+        <label class="prompt-label">Full prompt sent
+          <textarea id="prompt-full" readonly></textarea>
+        </label>
         <div class="diff">
           <div class="diff-col"><span class="diff-label">Selected</span><pre id="diff-original"></pre></div>
           <div class="diff-col"><span class="diff-label proposed">Proposed</span><pre id="diff-proposed"></pre></div>

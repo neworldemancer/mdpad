@@ -301,7 +301,7 @@ function showDock(data, selected) {
     .map((i) => `<li><b>${escapeHtml(i.label)}</b><span class="n">≈ ${i.tokens}</span></li>`)
     .join("");
   const pr = data.prompt || {};
-  $("prompt-full").textContent = "[system]\n" + (pr.system || "") + "\n\n[user]\n" + (pr.user || "");
+  $("prompt-full").value = "[system]\n" + (pr.system || "") + "\n\n[user]\n" + (pr.user || "");
 
   // review
   const p = data.proposal;
