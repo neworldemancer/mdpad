@@ -129,6 +129,50 @@ function selectSourceLines(el) {
   syncFromEditor(true);
 }
 
+// ---- draggable pane dividers -------------------------------------------
+let drag = null;
+function initResizers() {
+  const ws = document.querySelector(".workspace");
+  const saved = JSON.parse(localStorage.getItem("mdpad.layout") || "{}");
+  if (saved.sidebar) ws.style.setProperty("--w-sidebar", saved.sidebar + "px");
+  if (saved.editor) ws.style.setProperty("--w-editor", saved.editor + "px");
+  document.querySelectorAll(".gutter").forEach((g) => {
+    g.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      drag = {
+        which: g.dataset.resize, startX: e.clientX, ws,
+        sidebarW: document.querySelector(".sidebar").getBoundingClientRect().width,
+        editorW: document.querySelector(".editor-pane").getBoundingClientRect().width,
+      };
+      g.classList.add("dragging");
+      document.body.style.cursor = "col-resize";
+      window.addEventListener("mousemove", onDrag);
+      window.addEventListener("mouseup", endDrag);
+    });
+  });
+}
+function onDrag(e) {
+  if (!drag) return;
+  const dx = e.clientX - drag.startX;
+  if (drag.which === "sidebar") {
+    drag.ws.style.setProperty("--w-sidebar", Math.max(140, Math.min(drag.sidebarW + dx, 480)) + "px");
+  } else {
+    drag.ws.style.setProperty("--w-editor", Math.max(240, drag.editorW + dx) + "px");
+  }
+}
+function endDrag() {
+  if (!drag) return;
+  localStorage.setItem("mdpad.layout", JSON.stringify({
+    sidebar: Math.round(document.querySelector(".sidebar").getBoundingClientRect().width),
+    editor: Math.round(document.querySelector(".editor-pane").getBoundingClientRect().width),
+  }));
+  document.querySelectorAll(".gutter").forEach((g) => g.classList.remove("dragging"));
+  document.body.style.cursor = "";
+  window.removeEventListener("mousemove", onDrag);
+  window.removeEventListener("mouseup", endDrag);
+  drag = null;
+}
+
 // ---- provider settings (localStorage + server .env) --------------------
 let serverHasKey = false; // true when the backend holds an API key (.env)
 let savedModel = "";      // model id from localStorage, applied once models load
@@ -240,6 +284,8 @@ function showDock(data, selected) {
   $("ctx-legend").innerHTML = items
     .map((i) => `<li><b>${escapeHtml(i.label)}</b><span class="n">≈ ${i.tokens}</span></li>`)
     .join("");
+  const pr = data.prompt || {};
+  $("prompt-full").textContent = "[system]\n" + (pr.system || "") + "\n\n[user]\n" + (pr.user || "");
 
   // review
   const p = data.proposal;
@@ -411,6 +457,7 @@ $("save").addEventListener("click", saveFile);
   }
   dirty = false;
   updateFilename();
+  initResizers();
   await refreshFiles();
   await initProvider();
   renderPreview(); buildOutline(); markActiveSection();

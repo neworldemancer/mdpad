@@ -188,6 +188,7 @@ def revise(req: ReviseRequest) -> dict:
     return {
         "section": section.title if section else None,
         "context": package.as_dict(),
+        "prompt": {"system": prov.SYSTEM_PROMPT, "user": package.as_prompt()},
         "proposal": proposal.as_dict() if proposal else None,
         "error": error,
     }
