@@ -19,8 +19,10 @@ can be rebuilt in bulk on demand.
 from __future__ import annotations
 
 import difflib
+import json
 import time
 from dataclasses import asdict, dataclass
+from pathlib import Path
 
 from . import provider as prov
 from .sections import Block, Section, ancestors
@@ -42,6 +44,31 @@ CHANGE_GATE_SYSTEM = (
 STALE_AFTER_S = 600.0
 # Rough per-item overhead (system prompt + instructions) added to `estimate`.
 _OVERHEAD_TOKENS = 40
+
+
+def save(path) -> None:
+    """Persist the current store to a JSON sidecar (``<doc>.md.summ.json``)."""
+    data = {key: asdict(s) for key, s in _STORE.items()}
+    Path(path).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def load(path) -> int:
+    """Replace the store with a JSON sidecar; empties the store if it's missing
+    or unreadable. Returns the number of summaries loaded."""
+    _STORE.clear()
+    p = Path(path)
+    if not p.is_file():
+        return 0
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+    for key, d in data.items():
+        try:
+            _STORE[key] = Summary(**d)
+        except TypeError:
+            continue  # skip entries that don't match the current schema
+    return len(_STORE)
 
 
 @dataclass

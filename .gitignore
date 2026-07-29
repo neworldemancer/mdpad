@@ -15,3 +15,6 @@ wheels/
 # Tooling caches
 .pytest_cache/
 graphify-out/
+
+# Per-document summary cache
+*.summ.json

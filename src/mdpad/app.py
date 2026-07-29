@@ -63,6 +63,11 @@ def _safe_doc_path(name: str) -> Path:
     return path
 
 
+def _summ_path(name: str) -> Path:
+    """Sidecar file caching a document's summaries: ``<name>.summ.json``."""
+    return DOCS_DIR / f"{name}.summ.json"
+
+
 class ProviderSettings(BaseModel):
     base_url: str = ""
     api_key: str = ""
@@ -164,6 +169,7 @@ def read_file(name: str) -> dict:
         raise HTTPException(404, f"No such file in {DOCS_DIR}: {name}")
     _current_doc = path.read_text(encoding="utf-8")
     _current_name = name
+    summ.load(_summ_path(name))  # reuse this doc's cached summaries if present
     return {"name": name, "text": _current_doc}
 
 
@@ -226,7 +232,10 @@ def summaries_refresh(req: SummariesRefreshRequest) -> dict:
         d["base_url"], d["api_key"] = _resolve_endpoint(d.get("base_url", ""), d.get("api_key", ""))
     except ValueError as e:
         return {"generated": 0, "checked": 0, "skipped": 0, "tokens": 0, "error": str(e)}
-    return summ.refresh(sections, blocks, req.text, d, req.mode)
+    result = summ.refresh(sections, blocks, req.text, d, req.mode)
+    if _current_name:
+        summ.save(_summ_path(_current_name))  # persist so a reopen reuses them
+    return result
 
 
 @app.post("/api/summaries/estimate")
@@ -296,7 +305,8 @@ def main() -> None:
         if target.is_file():
             _current_doc = target.read_text(encoding="utf-8")
             _current_name = target.name
-            print(f"mdpad: loaded {target}")
+            n = summ.load(_summ_path(target.name))
+            print(f"mdpad: loaded {target}" + (f" (+{n} cached summaries)" if n else ""))
         else:
             print(f"mdpad: file not found, using the bundled example: {target}")
 
