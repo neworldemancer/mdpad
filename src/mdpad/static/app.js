@@ -129,44 +129,60 @@ function selectSourceLines(el) {
   syncFromEditor(true);
 }
 
-// ---- draggable pane dividers -------------------------------------------
+// Scroll the editor so `line` sits near the top third of the textarea.
+function scrollEditorToLine(line) {
+  const cs = getComputedStyle(editor);
+  const lh = parseFloat(cs.lineHeight) || 20;
+  const pad = parseFloat(cs.paddingTop) || 0;
+  editor.scrollTop = Math.max(0, line * lh + pad - editor.clientHeight / 3);
+}
+
+// ---- draggable pane dividers + resizable dock --------------------------
 let drag = null;
 function initResizers() {
   const ws = document.querySelector(".workspace");
   const saved = JSON.parse(localStorage.getItem("mdpad.layout") || "{}");
   if (saved.sidebar) ws.style.setProperty("--w-sidebar", saved.sidebar + "px");
   if (saved.editor) ws.style.setProperty("--w-editor", saved.editor + "px");
-  document.querySelectorAll(".gutter").forEach((g) => {
-    g.addEventListener("mousedown", (e) => {
-      e.preventDefault();
-      drag = {
-        which: g.dataset.resize, startX: e.clientX, ws,
-        sidebarW: document.querySelector(".sidebar").getBoundingClientRect().width,
-        editorW: document.querySelector(".editor-pane").getBoundingClientRect().width,
-      };
-      g.classList.add("dragging");
-      document.body.style.cursor = "col-resize";
-      window.addEventListener("mousemove", onDrag);
-      window.addEventListener("mouseup", endDrag);
-    });
-  });
+  if (saved.dock) $("dock").style.height = saved.dock + "px";
+  document.querySelectorAll(".gutter").forEach((g) =>
+    g.addEventListener("mousedown", (e) => beginDrag(e, g, g.dataset.resize)));
+  const dr = document.querySelector(".dock-resize");
+  if (dr) dr.addEventListener("mousedown", (e) => beginDrag(e, dr, "dock"));
+}
+function beginDrag(e, handle, which) {
+  e.preventDefault();
+  drag = {
+    which, handle, startX: e.clientX, startY: e.clientY,
+    ws: document.querySelector(".workspace"),
+    sidebarW: document.querySelector(".sidebar").getBoundingClientRect().width,
+    editorW: document.querySelector(".editor-pane").getBoundingClientRect().width,
+    dockH: $("dock").getBoundingClientRect().height,
+  };
+  handle.classList.add("dragging");
+  document.body.style.cursor = which === "dock" ? "row-resize" : "col-resize";
+  window.addEventListener("mousemove", onDrag);
+  window.addEventListener("mouseup", endDrag);
 }
 function onDrag(e) {
   if (!drag) return;
-  const dx = e.clientX - drag.startX;
   if (drag.which === "sidebar") {
-    drag.ws.style.setProperty("--w-sidebar", Math.max(140, Math.min(drag.sidebarW + dx, 480)) + "px");
+    drag.ws.style.setProperty("--w-sidebar", Math.max(140, Math.min(drag.sidebarW + (e.clientX - drag.startX), 480)) + "px");
+  } else if (drag.which === "editor") {
+    drag.ws.style.setProperty("--w-editor", Math.max(240, drag.editorW + (e.clientX - drag.startX)) + "px");
   } else {
-    drag.ws.style.setProperty("--w-editor", Math.max(240, drag.editorW + dx) + "px");
+    $("dock").style.height = Math.max(120, Math.min(drag.dockH - (e.clientY - drag.startY), window.innerHeight * 0.85)) + "px";
   }
 }
 function endDrag() {
   if (!drag) return;
+  const prev = JSON.parse(localStorage.getItem("mdpad.layout") || "{}");
   localStorage.setItem("mdpad.layout", JSON.stringify({
     sidebar: Math.round(document.querySelector(".sidebar").getBoundingClientRect().width),
     editor: Math.round(document.querySelector(".editor-pane").getBoundingClientRect().width),
+    dock: $("dock").hidden ? prev.dock : Math.round($("dock").getBoundingClientRect().height),
   }));
-  document.querySelectorAll(".gutter").forEach((g) => g.classList.remove("dragging"));
+  drag.handle.classList.remove("dragging");
   document.body.style.cursor = "";
   window.removeEventListener("mousemove", onDrag);
   window.removeEventListener("mouseup", endDrag);
@@ -434,6 +450,12 @@ preview.addEventListener("click", (e) => {
   const el = e.target.closest("[data-line-start]");
   if (el) selectSourceLines(el);
 });
+// double-click a block -> scroll the counterpart pane to the same block
+preview.addEventListener("dblclick", (e) => {
+  const el = e.target.closest("[data-line-start]");
+  if (el) { selectSourceLines(el); scrollEditorToLine(+el.getAttribute("data-line-start")); }
+});
+editor.addEventListener("dblclick", () => syncFromEditor(true));
 $("file-open").addEventListener("change", (e) => {
   const name = e.target.value;
   if (dirty && !confirm("Discard unsaved changes?")) {
