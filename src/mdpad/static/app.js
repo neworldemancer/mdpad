@@ -285,6 +285,7 @@ async function runAction(instruction) {
   }
   pending = { start, end };
   showDock(data, editor.value.slice(start, end));
+  setUsage(data.usage);
   hideToast();
 }
 
@@ -421,6 +422,7 @@ async function summaryTick() {
     const data = await res.json();
     if (!res.ok) return; // silent — background tick
     toast(`Summaries: ${data.generated} regenerated, ${data.checked} checked`);
+    setUsage(data.usage);
     refreshSummaryStatus();
   } catch {
     /* silent — background tick, never surface an error */
@@ -468,6 +470,7 @@ async function regenerateSummaries() {
     toast(data.error
       ? "Regenerate: " + data.error
       : `Summaries: ${data.generated} generated, ${data.skipped} skipped`);
+    setUsage(data.usage);
   } catch (e) {
     return toast("Regenerate failed: " + e.message);
   }
@@ -475,6 +478,13 @@ async function regenerateSummaries() {
 }
 
 // ---- helpers ------------------------------------------------------------
+function fmtTok(n) { return n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n); }
+function setUsage(u) {
+  if (!u) return;
+  $("usage").textContent = "Σ " + fmtTok((u.input || 0) + (u.output || 0)) + " tok";
+  $("usage").title = `in ${u.input || 0} · out ${u.output || 0} · ${u.calls || 0} calls`;
+}
+async function refreshUsage() { try { setUsage(await (await fetch("/api/usage")).json()); } catch { /* ignore */ } }
 function escapeHtml(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
@@ -606,6 +616,7 @@ $("regen-summaries").addEventListener("click", regenerateSummaries);
   await initProvider();
   renderPreview(); buildOutline(); markActiveSection();
   refreshSummaryStatus();
+  refreshUsage();
   setMap(mapOpen);
   setInterval(autosaveTick, 30000);
   setInterval(summaryTick, 600000);

@@ -26,6 +26,25 @@ class ProviderError(RuntimeError):
     """Raised when the provider request or its response is unusable."""
 
 
+# Cumulative token usage for this server session (every revise + summary call).
+# Uses the provider's real ``usage`` when present, else a len/4 estimate.
+USAGE = {"input": 0, "output": 0, "calls": 0}
+
+
+def usage_totals() -> dict:
+    return dict(USAGE)
+
+
+def _record_usage(usage: dict | None, sent: str, received: str) -> None:
+    USAGE["calls"] += 1
+    if isinstance(usage, dict) and (usage.get("prompt_tokens") or usage.get("completion_tokens")):
+        USAGE["input"] += int(usage.get("prompt_tokens") or 0)
+        USAGE["output"] += int(usage.get("completion_tokens") or 0)
+    else:
+        USAGE["input"] += max(1, len(sent) // 4)
+        USAGE["output"] += max(1, len(received) // 4)
+
+
 @dataclass
 class Proposal:
     replacement_text: str
@@ -98,7 +117,10 @@ def _chat_completion(*, system: str, user: str, provider: dict) -> str:
             timeout=float(provider.get("timeout", 60)),
         )
         resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
+        data = resp.json()
+        content = data["choices"][0]["message"]["content"]
+        _record_usage(data.get("usage"), system + user, content)
+        return content
     except httpx.HTTPStatusError as e:
         detail = e.response.text.strip().replace("\n", " ")[:300]
         raise ProviderError(f"Provider {e.response.status_code}: {detail or e}") from e

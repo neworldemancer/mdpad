@@ -82,6 +82,7 @@ body {
 }
 
 .provider-status { display: flex; align-items: center; gap: 10px; }
+.usage { font-family: var(--font-mono); font-size: 11px; color: var(--ink-soft); white-space: nowrap; }
 
 .dot {
   width: 8px; height: 8px; border-radius: 50%;

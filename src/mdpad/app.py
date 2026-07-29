@@ -143,6 +143,12 @@ def provider_config() -> dict:
     return {"base_url": SERVER_BASE_URL, "has_key": bool(SERVER_API_KEY)}
 
 
+@app.get("/api/usage")
+def usage() -> dict:
+    """Cumulative token usage for this server session."""
+    return prov.usage_totals()
+
+
 @app.get("/api/models")
 def list_models_endpoint(base_url: str = "", api_key: str = "") -> dict:
     """Fetch the OpenAI-compatible model list. Blank args use the server defaults."""
@@ -225,6 +231,7 @@ def revise(req: ReviseRequest) -> dict:
         "prompt": {"system": prov.SYSTEM_PROMPT, "user": package.as_prompt()},
         "proposal": proposal.as_dict() if proposal else None,
         "error": error,
+        "usage": prov.usage_totals(),
     }
 
 
@@ -240,6 +247,7 @@ def summaries_refresh(req: SummariesRefreshRequest) -> dict:
     result = summ.refresh(sections, blocks, req.text, d, req.mode)
     if _current_name:
         summ.save(_summ_path(_current_name))  # persist so a reopen reuses them
+    result["usage"] = prov.usage_totals()
     return result
 
 
