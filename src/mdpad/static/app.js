@@ -401,6 +401,79 @@ async function saveFile() {
   toast("Saved " + data.name);
 }
 
+// ---- summaries (autosave, background refresh, manual regenerate) -------
+async function autosaveTick() {
+  if (!dirty || !currentName) return;
+  try {
+    await saveFile(); // clears `dirty`, updates state, toasts "Saved <name>"
+  } catch (e) {
+    toast("Autosave failed: " + e.message);
+  }
+}
+
+async function summaryTick() {
+  try {
+    const res = await fetch("/api/summaries/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: editor.value, mode: "invalidated", provider: readSettings() }),
+    });
+    const data = await res.json();
+    if (!res.ok) return; // silent — background tick
+    toast(`Summaries: ${data.generated} regenerated, ${data.checked} checked`);
+    refreshSummaryStatus();
+  } catch {
+    /* silent — background tick, never surface an error */
+  }
+}
+
+async function refreshSummaryStatus() {
+  const el = $("summary-status");
+  try {
+    const res = await fetch("/api/summaries", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: editor.value }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "status failed");
+    el.textContent = data.summarized + "/" + data.total + " summarized";
+  } catch {
+    el.textContent = ""; // degrade gracefully — status is best-effort
+  }
+}
+
+async function regenerateSummaries() {
+  let est;
+  try {
+    const res = await fetch("/api/summaries/estimate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: editor.value, mode: "all" }),
+    });
+    est = await res.json();
+    if (!res.ok) return toast("Estimate failed: " + (est.detail || res.statusText));
+  } catch (e) {
+    return toast("Estimate failed: " + e.message);
+  }
+  if (!confirm("~" + est.est_tokens + " tokens. Regenerate all summaries?")) return;
+  try {
+    const res = await fetch("/api/summaries/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: editor.value, mode: "all", provider: readSettings() }),
+    });
+    const data = await res.json();
+    if (!res.ok) return toast("Regenerate failed: " + (data.detail || res.statusText));
+    toast(data.error
+      ? "Regenerate: " + data.error
+      : `Summaries: ${data.generated} generated, ${data.skipped} skipped`);
+  } catch (e) {
+    return toast("Regenerate failed: " + e.message);
+  }
+  refreshSummaryStatus();
+}
+
 // ---- helpers ------------------------------------------------------------
 function escapeHtml(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -465,6 +538,7 @@ $("file-open").addEventListener("change", (e) => {
   openFile(name);
 });
 $("save").addEventListener("click", saveFile);
+$("regen-summaries").addEventListener("click", regenerateSummaries);
 
 // ---- boot ---------------------------------------------------------------
 (async function boot() {
@@ -483,4 +557,7 @@ $("save").addEventListener("click", saveFile);
   await refreshFiles();
   await initProvider();
   renderPreview(); buildOutline(); markActiveSection();
+  refreshSummaryStatus();
+  setInterval(autosaveTick, 30000);
+  setInterval(summaryTick, 600000);
 })();

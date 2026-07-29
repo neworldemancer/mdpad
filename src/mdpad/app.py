@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 
 from . import context as ctx
 from . import provider as prov
+from . import summaries as summ
 from .sections import parse_sections, section_at
 
 load_dotenv()
@@ -76,6 +77,21 @@ class ReviseRequest(BaseModel):
     sel_end: int
     instruction: str
     provider: ProviderSettings = Field(default_factory=ProviderSettings)
+
+
+class SummariesRefreshRequest(BaseModel):
+    text: str
+    mode: str = "invalidated"
+    provider: ProviderSettings = Field(default_factory=ProviderSettings)
+
+
+class SummariesEstimateRequest(BaseModel):
+    text: str
+    mode: str = "all"
+
+
+class SummariesStatusRequest(BaseModel):
+    text: str = ""
 
 
 def _resolve_endpoint(base_url: str, api_key: str) -> tuple[str, str]:
@@ -165,12 +181,14 @@ def save_file(req: SaveRequest) -> dict:
 def revise(req: ReviseRequest) -> dict:
     selection = req.text[req.sel_start:req.sel_end]
     sections = parse_sections(req.text)
-    section = section_at(sections, req.sel_start, req.text)
+    target = section_at(sections, req.sel_start, req.text)
     package = ctx.build_context(
         project_summary=_PROJECT_SUMMARY,
-        section=section,
+        sections=sections,
+        target=target,
         selection=selection,
         instruction=req.instruction,
+        store=summ._STORE,
     )
     proposal = None
     error = None
@@ -186,12 +204,35 @@ def revise(req: ReviseRequest) -> dict:
     except (ValueError, prov.ProviderError) as e:
         error = str(e)
     return {
-        "section": section.title if section else None,
+        "section": target.title if target else None,
         "context": package.as_dict(),
         "prompt": {"system": prov.SYSTEM_PROMPT, "user": package.as_prompt()},
         "proposal": proposal.as_dict() if proposal else None,
         "error": error,
     }
+
+
+@app.post("/api/summaries/refresh")
+def summaries_refresh(req: SummariesRefreshRequest) -> dict:
+    sections = parse_sections(req.text)
+    d = req.provider.model_dump()
+    try:
+        d["base_url"], d["api_key"] = _resolve_endpoint(d.get("base_url", ""), d.get("api_key", ""))
+    except ValueError as e:
+        return {"generated": 0, "checked": 0, "skipped": 0, "tokens": 0, "error": str(e)}
+    return summ.refresh(sections, req.text, d, req.mode)
+
+
+@app.post("/api/summaries/estimate")
+def summaries_estimate(req: SummariesEstimateRequest) -> dict:
+    sections = parse_sections(req.text)
+    return summ.estimate(sections, req.mode)
+
+
+@app.post("/api/summaries")
+def summaries_status(req: SummariesStatusRequest) -> dict:
+    sections = parse_sections(req.text or _current_doc)
+    return summ.status(sections)
 
 
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")

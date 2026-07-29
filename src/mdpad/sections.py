@@ -68,3 +68,35 @@ def section_at(sections: list[Section], offset: int, text: str) -> Section | Non
         if s.start_line <= line < s.end_line and (best is None or s.level >= best.level):
             best = s
     return best
+
+
+def ancestors(sections: list[Section], target: Section) -> list[Section]:
+    """Return ``target``'s enclosing sections, ordered root -> immediate parent.
+
+    A section ``s`` encloses ``target`` when it has a strictly lower level and
+    its line range contains ``target``'s whole range. ``sections`` is in
+    document order, so enclosing sections naturally sort outermost-first.
+    """
+    return [
+        s
+        for s in sections
+        if s.level < target.level and s.start_line <= target.start_line and s.end_line >= target.end_line
+    ]
+
+
+def _parent(sections: list[Section], s: Section) -> Section | None:
+    anc = ancestors(sections, s)
+    return anc[-1] if anc else None
+
+
+def adjacent(sections: list[Section], target: Section) -> tuple[Section | None, Section | None]:
+    """Return ``target``'s previous and next sibling (nearest sections at the
+    same level sharing the same immediate parent), or ``None`` where absent."""
+    parent = _parent(sections, target)
+    siblings = [s for s in sections if s.level == target.level and _parent(sections, s) == parent]
+    if target not in siblings:
+        return None, None
+    idx = siblings.index(target)
+    prev_s = siblings[idx - 1] if idx > 0 else None
+    next_s = siblings[idx + 1] if idx < len(siblings) - 1 else None
+    return prev_s, next_s

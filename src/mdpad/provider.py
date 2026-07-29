@@ -69,20 +69,25 @@ def list_models(*, base_url: str, api_key: str, timeout: float = 15) -> list[str
     return sorted(m["id"] for m in data if isinstance(m, dict) and m.get("id"))
 
 
-def revise(*, package_text: str, selection: str, instruction: str, provider: dict) -> Proposal:
+def _chat_completion(*, system: str, user: str, provider: dict) -> str:
+    """Shared OpenAI-compatible ``/chat/completions`` call; returns raw content.
+
+    Blank ``base_url``/``api_key``/``model`` raise ``ProviderError`` -- callers
+    that want an offline fallback (e.g. ``revise``) must check beforehand.
+    """
     base_url = (provider.get("base_url") or "").rstrip("/")
     api_key = provider.get("api_key") or ""
     model = provider.get("model") or ""
     if not (base_url and api_key and model):
-        return _mock(selection, instruction)
+        raise ProviderError("Provider not configured: base_url, api_key and model are required.")
 
     payload = {
         "model": model,
         "temperature": float(provider.get("temperature", 0.3)),
         "max_tokens": int(provider.get("max_tokens", 1024)),
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": package_text},
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
         ],
     }
     try:
@@ -93,7 +98,7 @@ def revise(*, package_text: str, selection: str, instruction: str, provider: dic
             timeout=float(provider.get("timeout", 60)),
         )
         resp.raise_for_status()
-        content = resp.json()["choices"][0]["message"]["content"]
+        return resp.json()["choices"][0]["message"]["content"]
     except httpx.HTTPStatusError as e:
         detail = e.response.text.strip().replace("\n", " ")[:300]
         raise ProviderError(f"Provider {e.response.status_code}: {detail or e}") from e
@@ -102,6 +107,21 @@ def revise(*, package_text: str, selection: str, instruction: str, provider: dic
     except (KeyError, IndexError, TypeError) as e:
         raise ProviderError(f"Unexpected provider response shape: {e}") from e
 
+
+def chat_text(*, system: str, user: str, provider: dict) -> str:
+    """Plain-text chat completion (no JSON parsing) -- used for summarization
+    and change-detection, which want prose, not the strict-JSON revise schema."""
+    return _chat_completion(system=system, user=user, provider=provider)
+
+
+def revise(*, package_text: str, selection: str, instruction: str, provider: dict) -> Proposal:
+    base_url = (provider.get("base_url") or "").rstrip("/")
+    api_key = provider.get("api_key") or ""
+    model = provider.get("model") or ""
+    if not (base_url and api_key and model):
+        return _mock(selection, instruction)
+
+    content = _chat_completion(system=SYSTEM_PROMPT, user=package_text, provider=provider)
     return _validate(content)
 
 

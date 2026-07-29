@@ -130,6 +130,9 @@ body {
 .outline .tick { width: 3px; height: 12px; background: var(--accent); border-radius: 1px; opacity: 0; }
 .outline li.active .tick { opacity: 1; }
 
+/* ---- summary controls --------------------------------------------------- */
+.summary-controls { margin-top: 14px; display: grid; gap: 4px; }
+
 /* ---- settings --------------------------------------------------------- */
 .settings { margin-top: 22px; display: grid; gap: 10px; }
 .settings label { display: grid; gap: 4px; font-size: 11px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .06em; }
