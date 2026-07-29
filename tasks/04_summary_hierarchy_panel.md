@@ -9,7 +9,17 @@ see the context the model would receive, without running a revise.
 
 This reuses everything Task 03 built (`ancestors`, `adjacent`, the summary store,
 the excerpt fallback) — it is a **read-only view of the summary context**, no LLM
-calls on selection.
+calls on selection. Each card also shows a **validity state** so the user can see
+at a glance which summaries are current and which need rebuilding.
+
+## Validity states (compute locally, no LLM)
+For a section vs its cached `Summary` (using `now` and the 10-min rule):
+- `valid` — cached and `source_text == section.text`.
+- `stale` — cached, text changed, age ≤ 10 min (not yet eligible for auto-refresh).
+- `expired` — cached, text changed, age > 10 min (eligible; will refresh on the tick).
+- `missing` — no cached summary (context uses the excerpt fallback).
+Add `summaries.validity(sections, store, now=None) -> {section_id: state}` and have
+`summaries.status()` also return per-state counts, e.g. `{valid, stale, expired, missing, total}`.
 
 > Written as subtasks for a simple subagent. Orient with `graphify query "<q>"`
 > or by reading the named files. Depends on Task 03 (`summaries.py`,
@@ -49,9 +59,12 @@ and render the hierarchy (safe DOM: `textContent`/`createElement`). Also refresh
 after a revise Accept and after a summaries regeneration. Toggle button shows/hides
 the panel (persist the open/closed state in `localStorage`, like the layout).
 
-### ST-4 — polish
-Show an "(unsummarized)" tag when a card is an excerpt fallback (so the user knows
-to Regenerate). Empty/None neighbours render a muted "— none —".
+### ST-4 — validity badges + polish
+Each panel card shows a small colored badge for its validity state (valid=accent,
+stale/expired=warning, missing="(unsummarized)"). The endpoint from ST-1 includes
+each entry's `state` (from `summaries.validity`). Also surface the counts in the
+sidebar status label (e.g. "valid 10 · stale 2 · missing 3"). Empty/None neighbours
+render a muted "— none —".
 
 ## Acceptance
 - With the panel open, moving the caret between sections updates the right panel to
