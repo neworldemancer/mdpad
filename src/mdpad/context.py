@@ -1,12 +1,14 @@
 """Build the compact, inspectable context package sent to the model.
 
-Order: project summary -> document summary -> parent-section summaries ->
-previous-sibling summary -> current section (full text) -> next-sibling
-summary -> selected text -> user instruction. The current section is the only
-thing sent in full; everything else around it is a cached 1-3 sentence
-summary (or, if none is cached yet, a local first-two-sentences excerpt --
-never the whole manuscript). Token counts are rough ``len/4`` estimates -- a
-deliberate PoC stand-in for a real tokenizer.
+Order: project summary -> document summary -> for each ancestor level
+outer-to-inner (``#`` -> ``##`` -> ``###``): previous-sibling summary ->
+ancestor summary -> next-sibling summary -> previous-paragraph summary ->
+current paragraph (full text) -> next-paragraph summary -> selected text ->
+user instruction. The current paragraph is the only thing sent in full;
+everything else around it is a cached 1-3 sentence (additive) summary or, if
+none is cached yet, a local first-two-sentences excerpt -- never the whole
+manuscript. Token counts are rough ``len/4`` estimates -- a deliberate PoC
+stand-in for a real tokenizer.
 """
 
 from __future__ import annotations
@@ -14,7 +16,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from .sections import Section, adjacent, ancestors
+from .sections import Block, Section, adjacent, ancestors, block_adjacent
 
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
 
@@ -33,12 +35,12 @@ def _excerpt(text: str, n: int = 2) -> str:
     return " ".join(sentences[:n]).strip()
 
 
-def _summary_for(section: Section, store: dict) -> str:
-    """Cached summary for ``section``, or a local excerpt fallback."""
-    cached = store.get(section.id)
+def _summary_for(entity: Section | Block, store: dict) -> str:
+    """Cached summary for a section or block, or a local excerpt fallback."""
+    cached = store.get(entity.id)
     if cached is not None:
         return cached.summary
-    excerpt = _excerpt(section.text)
+    excerpt = _excerpt(entity.text)
     return f"{excerpt} (unsummarized)" if excerpt else "(unsummarized)"
 
 
@@ -78,37 +80,38 @@ def build_context(
     *,
     project_summary: str,
     sections: list[Section],
-    target: Section | None,
+    blocks: list[Block],
+    target_block: Block | None,
     selection: str,
     instruction: str,
     store: dict,
 ) -> ContextPackage:
-    parents_text = ""
-    prev_text = ""
-    next_text = ""
-    current_text = ""
-
-    if target is not None:
-        parent_secs = ancestors(sections, target)
-        parents_text = "\n".join(f"{p.title}: {_summary_for(p, store)}" for p in parent_secs)
-
-        prev_sec, next_sec = adjacent(sections, target)
-        if prev_sec is not None:
-            prev_text = f"{prev_sec.title}: {_summary_for(prev_sec, store)}"
-        if next_sec is not None:
-            next_text = f"{next_sec.title}: {_summary_for(next_sec, store)}"
-
-        current_text = f"{target.title}\n\n{target.text}"
-
-    raw = [
+    raw: list[tuple[str, str]] = [
         ("Project summary", project_summary.strip()),
         ("Document summary", _doc_summary(sections, store)),
-        ("Parent sections", parents_text),
-        ("Previous section", prev_text),
-        ("Current section", current_text),
-        ("Next section", next_text),
-        ("Selected text", selection.strip()),
-        ("Instruction", instruction.strip()),
     ]
+
+    if target_block is not None:
+        owner = next((s for s in sections if s.id == target_block.section_id), None)
+        chain = (ancestors(sections, owner) + [owner]) if owner is not None else []
+        for anc in chain:
+            prefix = "#" * anc.level
+            prev_s, next_s = adjacent(sections, anc)
+            if prev_s is not None:
+                raw.append((f"{prefix} {anc.title} (prev)", _summary_for(prev_s, store)))
+            raw.append((f"{prefix} {anc.title}", _summary_for(anc, store)))
+            if next_s is not None:
+                raw.append((f"{prefix} {anc.title} (next)", _summary_for(next_s, store)))
+
+        prev_b, next_b = block_adjacent(blocks, target_block)
+        if prev_b is not None:
+            raw.append(("Previous paragraph", _summary_for(prev_b, store)))
+        raw.append(("Current paragraph", target_block.text))
+        if next_b is not None:
+            raw.append(("Next paragraph", _summary_for(next_b, store)))
+
+    raw.append(("Selected text", selection.strip()))
+    raw.append(("Instruction", instruction.strip()))
+
     items = [ContextItem(label, txt, est_tokens(txt)) for label, txt in raw if txt]
     return ContextPackage(items, sum(i.tokens for i in items))

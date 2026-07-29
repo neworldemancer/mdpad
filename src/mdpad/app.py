@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 from . import context as ctx
 from . import provider as prov
 from . import summaries as summ
-from .sections import parse_sections, section_at
+from .sections import block_at, parse_blocks, parse_sections
 
 load_dotenv()
 # Server-side provider defaults. The key is read from .env and never sent to the
@@ -181,11 +181,16 @@ def save_file(req: SaveRequest) -> dict:
 def revise(req: ReviseRequest) -> dict:
     selection = req.text[req.sel_start:req.sel_end]
     sections = parse_sections(req.text)
-    target = section_at(sections, req.sel_start, req.text)
+    blocks = parse_blocks(req.text)
+    target_block = block_at(blocks, req.sel_start, req.text)
+    owner_section = None
+    if target_block is not None:
+        owner_section = next((s for s in sections if s.id == target_block.section_id), None)
     package = ctx.build_context(
         project_summary=_PROJECT_SUMMARY,
         sections=sections,
-        target=target,
+        blocks=blocks,
+        target_block=target_block,
         selection=selection,
         instruction=req.instruction,
         store=summ._STORE,
@@ -204,7 +209,7 @@ def revise(req: ReviseRequest) -> dict:
     except (ValueError, prov.ProviderError) as e:
         error = str(e)
     return {
-        "section": target.title if target else None,
+        "section": owner_section.title if owner_section else None,
         "context": package.as_dict(),
         "prompt": {"system": prov.SYSTEM_PROMPT, "user": package.as_prompt()},
         "proposal": proposal.as_dict() if proposal else None,
@@ -215,24 +220,28 @@ def revise(req: ReviseRequest) -> dict:
 @app.post("/api/summaries/refresh")
 def summaries_refresh(req: SummariesRefreshRequest) -> dict:
     sections = parse_sections(req.text)
+    blocks = parse_blocks(req.text)
     d = req.provider.model_dump()
     try:
         d["base_url"], d["api_key"] = _resolve_endpoint(d.get("base_url", ""), d.get("api_key", ""))
     except ValueError as e:
         return {"generated": 0, "checked": 0, "skipped": 0, "tokens": 0, "error": str(e)}
-    return summ.refresh(sections, req.text, d, req.mode)
+    return summ.refresh(sections, blocks, req.text, d, req.mode)
 
 
 @app.post("/api/summaries/estimate")
 def summaries_estimate(req: SummariesEstimateRequest) -> dict:
     sections = parse_sections(req.text)
-    return summ.estimate(sections, req.mode)
+    blocks = parse_blocks(req.text)
+    return summ.estimate(sections, blocks, req.mode)
 
 
 @app.post("/api/summaries")
 def summaries_status(req: SummariesStatusRequest) -> dict:
-    sections = parse_sections(req.text or _current_doc)
-    return summ.status(sections)
+    text = req.text or _current_doc
+    sections = parse_sections(text)
+    blocks = parse_blocks(text)
+    return summ.status(sections, blocks)
 
 
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")
