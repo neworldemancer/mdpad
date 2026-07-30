@@ -191,6 +191,8 @@ def save_file(req: SaveRequest) -> dict:
     path.write_text(req.text, encoding="utf-8")
     _current_doc = req.text
     _current_name = req.name
+    if summ._STORE:  # persist current summaries alongside the document
+        summ.save(_summ_path(req.name))
     return {"ok": True, "name": req.name}
 
 
