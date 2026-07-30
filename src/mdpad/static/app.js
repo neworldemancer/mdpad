@@ -157,6 +157,7 @@ function beginDrag(e, handle, which) {
     ws: document.querySelector(".workspace"),
     sidebarW: document.querySelector(".sidebar").getBoundingClientRect().width,
     editorW: document.querySelector(".editor-pane").getBoundingClientRect().width,
+    mapW: document.querySelector(".context-map").getBoundingClientRect().width,
     dockH: $("dock").getBoundingClientRect().height,
   };
   handle.classList.add("dragging");
@@ -170,6 +171,8 @@ function onDrag(e) {
     drag.ws.style.setProperty("--w-sidebar", Math.max(140, Math.min(drag.sidebarW + (e.clientX - drag.startX), 480)) + "px");
   } else if (drag.which === "editor") {
     drag.ws.style.setProperty("--w-editor", Math.max(240, drag.editorW + (e.clientX - drag.startX)) + "px");
+  } else if (drag.which === "map") {
+    drag.ws.style.setProperty("--w-map", Math.max(200, Math.min(drag.mapW - (e.clientX - drag.startX), 600)) + "px");
   } else {
     $("dock").style.height = Math.max(120, Math.min(drag.dockH - (e.clientY - drag.startY), window.innerHeight * 0.85)) + "px";
   }
@@ -178,9 +181,10 @@ function endDrag() {
   if (!drag) return;
   const prev = JSON.parse(localStorage.getItem("mdpad.layout") || "{}");
   localStorage.setItem("mdpad.layout", JSON.stringify({
-    sidebar: Math.round(document.querySelector(".sidebar").getBoundingClientRect().width),
+    sidebar: sidebarOpen ? Math.round(document.querySelector(".sidebar").getBoundingClientRect().width) : prev.sidebar,
     editor: Math.round(document.querySelector(".editor-pane").getBoundingClientRect().width),
     dock: $("dock").hidden ? prev.dock : Math.round($("dock").getBoundingClientRect().height),
+    map: mapOpen ? Math.round(document.querySelector(".context-map").getBoundingClientRect().width) : prev.map,
   }));
   drag.handle.classList.remove("dragging");
   document.body.style.cursor = "";
@@ -513,6 +517,19 @@ function toast(msg) {
 }
 function hideToast() { $("toast").hidden = true; }
 
+// ---- left sidebar (collapsible, toggled by Settings) --------------------
+let sidebarOpen = localStorage.getItem("mdpad.sidebarOpen") !== "0";
+
+function setSidebar(open) {
+  sidebarOpen = open;
+  localStorage.setItem("mdpad.sidebarOpen", open ? "1" : "0");
+  const saved = JSON.parse(localStorage.getItem("mdpad.layout") || "{}");
+  document.querySelector(".workspace").style.setProperty("--w-sidebar", open ? (saved.sidebar || 232) + "px" : "0");
+  const gutter = document.querySelector('.gutter[data-resize="sidebar"]');
+  if (gutter) gutter.hidden = !open;
+  if (open) $("settings").hidden = false;
+}
+
 // ---- summary-context panel ---------------------------------------------
 let mapOpen = localStorage.getItem("mdpad.mapOpen") === "1";
 let mapTimer = null;
@@ -520,7 +537,10 @@ let mapTimer = null;
 function setMap(open) {
   mapOpen = open;
   localStorage.setItem("mdpad.mapOpen", open ? "1" : "0");
-  document.querySelector(".workspace").style.setProperty("--w-map", open ? "300px" : "0");
+  const saved = JSON.parse(localStorage.getItem("mdpad.layout") || "{}");
+  document.querySelector(".workspace").style.setProperty("--w-map", open ? (saved.map || 300) + "px" : "0");
+  const gutter = document.querySelector('.gutter[data-resize="map"]');
+  if (gutter) gutter.hidden = !open;
   $("map-toggle").classList.toggle("on", open);
   if (open) refreshContextMap();
 }
@@ -549,15 +569,35 @@ async function refreshContextMap() {
   counts.className = "map-counts";
   counts.textContent = `valid ${c.valid || 0} · stale ${(c.stale || 0) + (c.expired || 0)} · missing ${c.missing || 0}`;
   el.appendChild(counts);
-  (data.items || []).forEach((it) => {
-    const row = document.createElement("div"); row.className = "map-row";
-    const label = document.createElement("div"); label.className = "map-label"; label.textContent = it.label;
-    const text = document.createElement("div");
-    text.className = "map-text" + (it.label.endsWith("(current) paragraph") ? " current" : "");
-    text.textContent = it.text;
-    row.appendChild(label); row.appendChild(text);
-    el.appendChild(row);
+
+  const levels = (data.tree && data.tree.levels) || [];
+  const tree = document.createElement("div");
+  tree.className = "map-tree";
+  levels.forEach((lvl) => {
+    const block = document.createElement("div");
+    block.className = "map-level-block";
+    block.style.paddingLeft = (lvl.level * 12) + "px";
+    const label = document.createElement("div");
+    label.className = "map-level";
+    label.textContent = "L" + lvl.level;
+    block.appendChild(label);
+    [[lvl.prev, false], [lvl.current, true], [lvl.next, false]].forEach(([node, isCurrent]) => {
+      if (!node) return;
+      const row = document.createElement("div");
+      row.className = "map-tree-row" + (isCurrent ? " current" : "");
+      row.title = node.summary || "";
+      const dot = document.createElement("span");
+      dot.className = "dot state-" + (node.state || "missing");
+      const title = document.createElement("span");
+      title.className = "title";
+      title.textContent = node.title || "";
+      row.appendChild(dot);
+      row.appendChild(title);
+      block.appendChild(row);
+    });
+    tree.appendChild(block);
   });
+  el.appendChild(tree);
 }
 
 // ---- wiring -------------------------------------------------------------
@@ -588,7 +628,7 @@ $("custom-instr").addEventListener("keydown", (e) => {
   }
 });
 $("settings-toggle").addEventListener("click", () => {
-  $("settings").hidden = !$("settings").hidden;
+  setSidebar(!sidebarOpen);
 });
 ["p-model", "p-temp", "p-max"].forEach((id) =>
   $(id).addEventListener("change", saveSettings)
@@ -650,6 +690,7 @@ $("regen-summaries").addEventListener("click", regenerateSummaries);
   renderPreview(); buildOutline(); markActiveSection();
   refreshSummaryStatus();
   refreshUsage();
+  setSidebar(sidebarOpen);
   setMap(mapOpen);
   setInterval(autosaveTick, 30000);
   setInterval(summaryTick, 600000);
