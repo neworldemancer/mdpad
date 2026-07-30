@@ -53,6 +53,13 @@ def _doc_summary(sections: list[Section], store: dict) -> str:
     return f"{excerpt} (unsummarized)" if excerpt else ""
 
 
+def _block_level(block: Block, sections: list[Section]) -> int:
+    """A paragraph's hierarchy level: its owning section's heading level + 1
+    (document = 0, top-level heading = 1, its subsection = 2, ...)."""
+    owner = next((s for s in sections if s.id == block.section_id), None)
+    return (owner.level + 1) if owner is not None else 1
+
+
 @dataclass
 class ContextItem:
     label: str
@@ -88,28 +95,29 @@ def build_context(
 ) -> ContextPackage:
     raw: list[tuple[str, str]] = [
         ("Project summary", project_summary.strip()),
-        ("Document summary", _doc_summary(sections, store)),
+        ("L0 Document", _doc_summary(sections, store)),
     ]
 
     if target_block is not None:
         owner = next((s for s in sections if s.id == target_block.section_id), None)
         chain = (ancestors(sections, owner) + [owner]) if owner is not None else []
         for anc in chain:
+            # "L{n}" makes the hierarchy explicit to the model (0 = doc, 1 =
+            # top-level heading, ...); each entry is labelled by its OWN title, so
+            # a neighbour reads "L2 (next) Beta", not the current section's title.
             prev_s, next_s = adjacent(sections, anc)
-            # Each entry is labelled by its OWN title + role, so a neighbour reads
-            # "(next) Mode Occupation", not the current section's title.
             if prev_s is not None:
-                raw.append((f"(previous) {prev_s.title}", _summary_for(prev_s, store)))
-            raw.append((f"(current) {anc.title}", _summary_for(anc, store)))
+                raw.append((f"L{anc.level} (previous) {prev_s.title}", _summary_for(prev_s, store)))
+            raw.append((f"L{anc.level} (current) {anc.title}", _summary_for(anc, store)))
             if next_s is not None:
-                raw.append((f"(next) {next_s.title}", _summary_for(next_s, store)))
+                raw.append((f"L{anc.level} (next) {next_s.title}", _summary_for(next_s, store)))
 
         prev_b, next_b = block_adjacent(blocks, target_block)
         if prev_b is not None:
-            raw.append(("(previous) paragraph", _summary_for(prev_b, store)))
-        raw.append(("(current) paragraph", target_block.text))
+            raw.append((f"L{_block_level(prev_b, sections)} (previous) paragraph", _summary_for(prev_b, store)))
+        raw.append((f"L{_block_level(target_block, sections)} (current) paragraph", target_block.text))
         if next_b is not None:
-            raw.append(("(next) paragraph", _summary_for(next_b, store)))
+            raw.append((f"L{_block_level(next_b, sections)} (next) paragraph", _summary_for(next_b, store)))
 
     raw.append(("Selected text", selection.strip()))
     raw.append(("Instruction", instruction.strip()))

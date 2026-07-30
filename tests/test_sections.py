@@ -229,13 +229,13 @@ def test_context_package_order_and_totals():
     # it does appear -- only the section-level "prev" siblings are absent).
     assert [i.label for i in pkg.items] == [
         "Project summary",
-        "Document summary",
-        "(current) Chapter",
-        "(current) Alpha",
-        "(next) Beta",
-        "(previous) paragraph",
-        "(current) paragraph",
-        "(next) paragraph",
+        "L0 Document",
+        "L1 (current) Chapter",
+        "L2 (current) Alpha",
+        "L2 (next) Beta",
+        "L2 (previous) paragraph",  # intro line, under Chapter (L1) -> L2
+        "L3 (current) paragraph",   # alpha body, under Alpha (L2) -> L3
+        "L3 (next) paragraph",      # beta body, under Beta (L2) -> L3
         "Selected text",
         "Instruction",
     ]
@@ -269,13 +269,13 @@ def test_context_uses_cached_summaries_not_full_text_for_neighbors():
         store=store,
     )
     by_label = {i.label: i.text for i in pkg.items}
-    assert by_label["Document summary"] == "Doc-level summary."
-    assert by_label["(current) Chapter"] == "Chapter overview."
-    assert by_label["(next) Beta"] == "Beta covers XYZ."
-    assert by_label["(previous) paragraph"] == "Chapter's intro, in short."
-    assert by_label["(next) paragraph"] == "Beta's paragraph, in short."
-    assert by_label["(current) paragraph"] == "alpha body"
-    assert "beta body" not in by_label["(next) Beta"]
+    assert by_label["L0 Document"] == "Doc-level summary."
+    assert by_label["L1 (current) Chapter"] == "Chapter overview."
+    assert by_label["L2 (next) Beta"] == "Beta covers XYZ."
+    assert by_label["L2 (previous) paragraph"] == "Chapter's intro, in short."
+    assert by_label["L3 (next) paragraph"] == "Beta's paragraph, in short."
+    assert by_label["L3 (current) paragraph"] == "alpha body"
+    assert "beta body" not in by_label["L2 (next) Beta"]
 
 
 def test_context_target_none_omits_ancestor_and_paragraph_items():
@@ -291,8 +291,8 @@ def test_context_target_none_omits_ancestor_and_paragraph_items():
         store={},
     )
     labels = [i.label for i in pkg.items]
-    assert "Current paragraph" not in labels
-    assert labels == ["Project summary", "Document summary", "Instruction"]
+    assert not any("(current) paragraph" in lbl for lbl in labels)
+    assert labels == ["Project summary", "L0 Document", "Instruction"]
 
 
 # --- /api/revise integration (blocks wired end-to-end) ----------------------
@@ -316,10 +316,10 @@ def test_revise_endpoint_sends_full_paragraph_and_section_summaries():
     assert data["section"] == "Alpha"
 
     items = {i["label"]: i["text"] for i in data["context"]["items"]}
-    assert items["(current) paragraph"] == "alpha body"
-    assert "(current) Chapter" in items
-    assert "(current) Alpha" in items
-    assert "(next) Beta" in items  # Beta is Alpha's next sibling
-    assert "(previous) paragraph" in items  # Chapter's intro paragraph
-    assert "(next) paragraph" in items  # Beta's paragraph
+    assert items["L3 (current) paragraph"] == "alpha body"
+    assert "L1 (current) Chapter" in items
+    assert "L2 (current) Alpha" in items
+    assert "L2 (next) Beta" in items  # Beta is Alpha's next sibling
+    assert "L2 (previous) paragraph" in items  # Chapter's intro paragraph
+    assert "L3 (next) paragraph" in items  # Beta's paragraph
     reset_summaries()
