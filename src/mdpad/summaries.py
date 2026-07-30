@@ -187,11 +187,18 @@ def refresh(sections: list[Section], blocks: list[Block], whole_text: str, provi
     error: str | None = None
     now = time.time()
 
-    if mode not in ("all", "invalidated"):
+    if mode not in ("all", "invalidated", "missing"):
         return {"generated": 0, "checked": 0, "skipped": 0, "tokens": 0, "error": f"Unknown mode: {mode!r}"}
 
     if not _configured(provider):
-        pending = len(sections) + len(blocks) + 1 if mode == "all" else len(_STORE)
+        if mode == "all":
+            pending = len(sections) + len(blocks) + 1
+        elif mode == "missing":
+            pending = (sum(1 for s in sections if s.id not in _STORE)
+                       + sum(1 for b in blocks if b.id not in _STORE)
+                       + (0 if DOC_ID in _STORE else 1))
+        else:
+            pending = len(_STORE)
         return {
             "generated": 0,
             "checked": 0,
@@ -201,24 +208,32 @@ def refresh(sections: list[Section], blocks: list[Block], whole_text: str, provi
         }
 
     try:
-        if mode == "all":
-            tokens += _est_tokens(whole_text)
-            doc_text = summarize(whole_text, [], provider)
-            put(Summary(DOC_ID, "Document", doc_text, whole_text, now))
-            generated += 1
+        if mode in ("all", "missing"):
+            only_missing = mode == "missing"
+            # Whole-document summary first (additive parents build on it).
+            if only_missing and DOC_ID in _STORE:
+                skipped += 1
+            else:
+                tokens += _est_tokens(whole_text)
+                put(Summary(DOC_ID, "Document", summarize(whole_text, [], provider), whole_text, now))
+                generated += 1
 
             for s in sorted(sections, key=lambda s: (s.level, s.start_line)):
+                if only_missing and s.id in _STORE:
+                    skipped += 1
+                    continue
                 parents = _parents_for_section(sections, s)
                 tokens += _est_tokens(s.text)
-                text = summarize(s.text, parents, provider)
-                put(Summary(s.id, s.title, text, s.text, now))
+                put(Summary(s.id, s.title, summarize(s.text, parents, provider), s.text, now))
                 generated += 1
 
             for b in blocks:
+                if only_missing and b.id in _STORE:
+                    skipped += 1
+                    continue
                 parents = _parents_for_block(sections, b)
                 tokens += _est_tokens(b.text)
-                text = summarize(b.text, parents, provider)
-                put(Summary(b.id, b.id, text, b.text, now))
+                put(Summary(b.id, b.id, summarize(b.text, parents, provider), b.text, now))
                 generated += 1
         else:  # "invalidated"
             by_sec = {s.id: s for s in sections}
@@ -268,7 +283,11 @@ def estimate(sections: list[Section], blocks: list[Block], mode: str) -> dict:
         sec_targets = list(sections)
         block_targets = list(blocks)
         include_doc = True
-    else:
+    elif mode == "missing":
+        sec_targets = [s for s in sections if s.id not in _STORE]
+        block_targets = [b for b in blocks if b.id not in _STORE]
+        include_doc = DOC_ID not in _STORE
+    else:  # invalidated
         sec_targets = [s for s in sections if s.id in _STORE]
         block_targets = [b for b in blocks if b.id in _STORE]
         include_doc = DOC_ID in _STORE

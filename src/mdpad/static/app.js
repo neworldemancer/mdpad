@@ -265,9 +265,25 @@ async function initProvider() {
 }
 
 // ---- revise flow --------------------------------------------------------
+// Auto-generate any summaries the document is missing (whole doc + all levels)
+// so a revise builds on real summaries, not excerpt fallbacks. Only the missing
+// ones are generated, so it is a one-time cost per new/changed section.
+async function ensureSummaries() {
+  try {
+    toast("Generating summaries…");
+    const res = await fetch("/api/summaries/refresh", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: editor.value, mode: "missing", provider: readSettings() }),
+    });
+    const data = await res.json();
+    if (data.generated) { setUsage(data.usage); refreshSummaryStatus(); }
+  } catch { /* proceed anyway; the revise falls back to excerpts */ }
+}
+
 async function runAction(instruction) {
   const start = editor.selectionStart, end = editor.selectionEnd;
   if (start === end) return toast("Select some text first.");
+  await ensureSummaries();
   toast("Building context…");
   let data;
   try {
