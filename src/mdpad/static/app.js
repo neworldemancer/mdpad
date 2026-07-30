@@ -546,14 +546,29 @@ async function refreshContextMap() {
 document.querySelectorAll(".act").forEach((btn) =>
   btn.addEventListener("click", () => {
     const act = btn.dataset.act;
-    if (act === "custom") {
-      const instr = prompt("Instruction for the selected text:");
-      if (instr) runAction(instr);
-    } else {
-      runAction(ACTIONS[act]);
-    }
+    if (act === "custom") openCustom();
+    else runAction(ACTIONS[act]);
   })
 );
+function openCustom() {
+  if (editor.selectionStart === editor.selectionEnd) return toast("Select some text first.");
+  $("custom-bar").hidden = false;
+  const input = $("custom-instr");
+  input.value = "";
+  input.focus();
+}
+$("custom-instr").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    const v = $("custom-instr").value.trim();
+    $("custom-bar").hidden = true;
+    if (v) runAction(v);
+  } else if (e.key === "Escape") {
+    e.preventDefault();
+    $("custom-bar").hidden = true;
+    editor.focus();
+  }
+});
 $("settings-toggle").addEventListener("click", () => {
   $("settings").hidden = !$("settings").hidden;
 });
