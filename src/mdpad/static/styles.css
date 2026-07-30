@@ -99,12 +99,25 @@ body {
 
 /* right-hand summary-context panel (collapses to 0 width when closed) */
 .context-map { overflow-y: auto; min-width: 0; background: var(--surface); border-left: 1px solid var(--line); }
-.map-head { padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-soft); }
+.map-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; border-bottom: 1px solid var(--line); font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-soft); }
+.map-view { font-size: 10px; padding: 3px 7px; border: 1px solid var(--line); border-radius: 5px; }
+.map-view:hover { border-color: var(--accent); }
 .map-counts { padding: 7px 14px; border-bottom: 1px solid var(--line); font-family: var(--font-mono); font-size: 11px; color: var(--ink-soft); }
 .map-row { padding: 8px 14px; border-bottom: 1px solid var(--line); }
 .map-label { font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--accent); margin-bottom: 3px; }
 .map-text { font-size: 12px; line-height: 1.45; color: var(--ink); white-space: pre-wrap; word-break: break-word; }
 .map-text.current { font-family: var(--font-mono); font-size: 11.5px; }
+
+/* visual (node-link) context view */
+.map-svg { display: block; width: 100%; }
+.map-edge { stroke: var(--line); stroke-width: 1.5; }
+.map-node circle { fill: var(--surface); stroke: var(--ink-soft); stroke-width: 1.5; }
+.map-node.cur circle { stroke-width: 2.5; }
+.map-node.state-valid circle { stroke: var(--accent); fill: var(--accent-soft); }
+.map-node.state-missing circle { stroke: var(--ink-soft); }
+.map-node.state-stale circle, .map-node.state-expired circle { stroke: #c98a2b; fill: #f6ecd9; }
+.map-node.state-current circle { stroke: var(--ink); fill: var(--accent-soft); }
+.map-node-label { font-family: var(--font-ui); font-size: 10px; fill: var(--ink); pointer-events: none; }
 
 /* context tree (Task 08) */
 .map-tree { padding: 4px 0 10px; }

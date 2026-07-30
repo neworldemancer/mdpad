@@ -549,21 +549,40 @@ function scheduleMap() {
   clearTimeout(mapTimer);
   mapTimer = setTimeout(refreshContextMap, 250);
 }
+let mapView = localStorage.getItem("mdpad.mapView") || "text";
+let _lastMap = null;
+
 async function refreshContextMap() {
   if (!mapOpen) return;
-  let data;
   try {
     const res = await fetch("/api/context/map", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: editor.value, offset: editor.selectionStart }),
     });
-    data = await res.json();
+    _lastMap = await res.json();
   } catch { return; }
+  renderContextMap(_lastMap);
+}
+
+function renderContextMap(data) {
   const el = $("context-map");
   el.innerHTML = "";
   const head = document.createElement("div");
-  head.className = "map-head"; head.textContent = "Context hierarchy";
+  head.className = "map-head";
+  const title = document.createElement("span");
+  title.textContent = "Context hierarchy";
+  const toggle = document.createElement("button");
+  toggle.className = "ghost map-view";
+  toggle.textContent = mapView === "visual" ? "Text" : "Visual";
+  toggle.title = "Toggle text / visual view";
+  toggle.addEventListener("click", () => {
+    mapView = mapView === "visual" ? "text" : "visual";
+    localStorage.setItem("mdpad.mapView", mapView);
+    if (_lastMap) renderContextMap(_lastMap);
+  });
+  head.appendChild(title); head.appendChild(toggle);
   el.appendChild(head);
+
   const c = data.counts || {};
   const counts = document.createElement("div");
   counts.className = "map-counts";
@@ -571,6 +590,11 @@ async function refreshContextMap() {
   el.appendChild(counts);
 
   const levels = (data.tree && data.tree.levels) || [];
+  if (mapView === "visual") renderMapVisual(el, levels);
+  else renderMapText(el, levels);
+}
+
+function renderMapText(el, levels) {
   const tree = document.createElement("div");
   tree.className = "map-tree";
   levels.forEach((lvl) => {
@@ -588,16 +612,62 @@ async function refreshContextMap() {
       row.title = node.summary || "";
       const dot = document.createElement("span");
       dot.className = "dot state-" + (node.state || "missing");
-      const title = document.createElement("span");
-      title.className = "title";
-      title.textContent = node.title || "";
-      row.appendChild(dot);
-      row.appendChild(title);
+      const t = document.createElement("span");
+      t.className = "title";
+      t.textContent = node.title || "";
+      row.appendChild(dot); row.appendChild(t);
       block.appendChild(row);
     });
     tree.appendChild(block);
   });
   el.appendChild(tree);
+}
+
+const SVGNS = "http://www.w3.org/2000/svg";
+function _svg(tag, attrs) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+function _tipped(el, text) {
+  const t = _svg("title", {}); t.textContent = text || ""; el.appendChild(t); return el;
+}
+// A node-link view: current nodes form the vertical spine; each splits into the
+// next level's previous/current/next. Title in the circle's label, summary on hover.
+function renderMapVisual(el, levels) {
+  const width = el.clientWidth || 300;
+  const rowH = 76, r = 15, padY = 34;
+  const cx = width / 2;
+  const offset = Math.min(width * 0.30, 108);
+  const height = padY * 2 + Math.max(0, levels.length - 1) * rowH;
+  const svg = _svg("svg", { class: "map-svg", width: "100%", viewBox: `0 0 ${width} ${height}`, preserveAspectRatio: "xMidYMin meet" });
+  const pos = (i, role) => ({ x: role === "prev" ? cx - offset : role === "next" ? cx + offset : cx, y: padY + i * rowH });
+
+  for (let i = 1; i < levels.length; i++) {
+    const p = pos(i - 1, "current");
+    ["prev", "current", "next"].forEach((role) => {
+      if (!levels[i][role]) return;
+      const cc = pos(i, role);
+      svg.appendChild(_svg("line", { class: "map-edge", x1: p.x, y1: p.y, x2: cc.x, y2: cc.y }));
+    });
+  }
+  levels.forEach((lvl, i) => {
+    ["prev", "current", "next"].forEach((role) => {
+      const n = lvl[role];
+      if (!n) return;
+      const { x, y } = pos(i, role);
+      const isCur = role === "current";
+      const g = _svg("g", { class: "map-node" + (isCur ? " cur" : "") + " state-" + (n.state || "missing") });
+      g.appendChild(_tipped(_svg("circle", { cx: x, cy: y, r: isCur ? r + 3 : r }), n.summary || n.title));
+      const label = _svg("text", { x: x, y: y + (isCur ? r + 3 : r) + 12, "text-anchor": "middle", class: "map-node-label" });
+      const words = (n.title || "").split(/\s+/).slice(0, 3).join(" ");
+      label.textContent = words.length > 18 ? words.slice(0, 17) + "…" : words;
+      _tipped(label, n.summary || n.title);
+      g.appendChild(label);
+      svg.appendChild(g);
+    });
+  });
+  el.appendChild(svg);
 }
 
 // ---- wiring -------------------------------------------------------------
