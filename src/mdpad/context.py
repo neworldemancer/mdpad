@@ -124,3 +124,52 @@ def build_context(
 
     items = [ContextItem(label, txt, est_tokens(txt)) for label, txt in raw if txt]
     return ContextPackage(items, sum(i.tokens for i in items))
+
+
+def _para_title(block: Block) -> str:
+    words = block.text.split()
+    title = " ".join(words[:6])
+    return (title + "…") if len(words) > 6 else (title or "paragraph")
+
+
+def _sec_node(sec: Section, store: dict, states: dict) -> dict:
+    return {"title": sec.title, "summary": _summary_for(sec, store), "state": states.get(sec.id, "missing")}
+
+
+def _blk_node(blk: Block, store: dict, states: dict) -> dict:
+    return {"title": _para_title(blk), "summary": _summary_for(blk, store), "state": states.get(blk.id, "missing")}
+
+
+def build_tree(*, sections: list[Section], blocks: list[Block], target_block: Block | None,
+               store: dict, states: dict | None = None) -> dict:
+    """A prev/current/next tree for the caret's paragraph, one 3-branch split per
+    hierarchy level (L0 document -> ... -> paragraph). Each node is
+    ``{title, summary, state}``; ``states`` is a unit-id -> validity map."""
+    states = states or {}
+    levels = [{
+        "level": 0, "prev": None, "next": None,
+        "current": {"title": "Document", "summary": _doc_summary(sections, store),
+                    "state": states.get("__doc__", "missing")},
+    }]
+    if target_block is None:
+        return {"levels": levels}
+
+    owner = next((s for s in sections if s.id == target_block.section_id), None)
+    chain = (ancestors(sections, owner) + [owner]) if owner is not None else []
+    for anc in chain:
+        prev_s, next_s = adjacent(sections, anc)
+        levels.append({
+            "level": anc.level,
+            "prev": _sec_node(prev_s, store, states) if prev_s is not None else None,
+            "current": _sec_node(anc, store, states),
+            "next": _sec_node(next_s, store, states) if next_s is not None else None,
+        })
+
+    prev_b, next_b = block_adjacent(blocks, target_block)
+    levels.append({
+        "level": (owner.level + 1) if owner is not None else 1,
+        "prev": _blk_node(prev_b, store, states) if prev_b is not None else None,
+        "current": {"title": _para_title(target_block), "summary": target_block.text, "state": "current"},
+        "next": _blk_node(next_b, store, states) if next_b is not None else None,
+    })
+    return {"levels": levels}

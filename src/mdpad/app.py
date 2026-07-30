@@ -288,6 +288,10 @@ def context_map(req: ContextMapRequest) -> dict:
         "items": package.as_dict()["items"],
         "counts": summ.status(sections, blocks, req.text),
         "current": target.id if target else None,
+        "tree": ctx.build_tree(
+            sections=sections, blocks=blocks, target_block=target,
+            store=summ._STORE, states=summ.validity(sections, blocks, req.text),
+        ),
     }
 
 
