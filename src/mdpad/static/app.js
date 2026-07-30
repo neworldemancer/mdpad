@@ -389,6 +389,7 @@ async function openFile(name) {
   dirty = false;
   closeDock();
   renderPreview(); buildOutline(); markActiveSection(); updateFilename();
+  refreshSummaryStatus(); refreshContextMap();  // reflect this doc's loaded summaries
   toast("Opened " + name);
 }
 
@@ -467,19 +468,20 @@ async function regenerateSummaries() {
     const res = await fetch("/api/summaries/estimate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: editor.value, mode: "all" }),
+      body: JSON.stringify({ text: editor.value, mode: "sync" }),
     });
     est = await res.json();
     if (!res.ok) return toast("Estimate failed: " + (est.detail || res.statusText));
   } catch (e) {
     return toast("Estimate failed: " + e.message);
   }
-  if (!confirm("~" + est.est_tokens + " tokens. Regenerate all summaries?")) return;
+  if (est.count === 0) return toast("Summaries already up to date.");
+  if (!confirm("~" + est.est_tokens + " tokens for " + est.count + " summaries (missing + changed). Continue?")) return;
   try {
     const res = await fetch("/api/summaries/refresh", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: editor.value, mode: "all", provider: readSettings() }),
+      body: JSON.stringify({ text: editor.value, mode: "sync", provider: readSettings() }),
     });
     const data = await res.json();
     if (!res.ok) return toast("Regenerate failed: " + (data.detail || res.statusText));

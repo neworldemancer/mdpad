@@ -187,8 +187,12 @@ def refresh(sections: list[Section], blocks: list[Block], whole_text: str, provi
     error: str | None = None
     now = time.time()
 
-    if mode not in ("all", "invalidated", "missing"):
+    if mode not in ("all", "invalidated", "missing", "sync"):
         return {"generated": 0, "checked": 0, "skipped": 0, "tokens": 0, "error": f"Unknown mode: {mode!r}"}
+
+    def _stale(uid: str, current: str) -> bool:  # missing OR changed
+        c = _STORE.get(uid)
+        return c is None or c.source_text != current
 
     if not _configured(provider):
         if mode == "all":
@@ -197,6 +201,10 @@ def refresh(sections: list[Section], blocks: list[Block], whole_text: str, provi
             pending = (sum(1 for s in sections if s.id not in _STORE)
                        + sum(1 for b in blocks if b.id not in _STORE)
                        + (0 if DOC_ID in _STORE else 1))
+        elif mode == "sync":
+            pending = (sum(1 for s in sections if _stale(s.id, s.text))
+                       + sum(1 for b in blocks if _stale(b.id, b.text))
+                       + (1 if _stale(DOC_ID, whole_text) else 0))
         else:
             pending = len(_STORE)
         return {
@@ -208,18 +216,27 @@ def refresh(sections: list[Section], blocks: list[Block], whole_text: str, provi
         }
 
     try:
-        if mode in ("all", "missing"):
-            only_missing = mode == "missing"
+        if mode in ("all", "missing", "sync"):
+            def _needs(uid: str, current: str) -> bool:
+                cached = _STORE.get(uid)
+                if cached is None:
+                    return True              # generate absent (all/missing/sync)
+                if mode == "all":
+                    return True              # force regenerate everything
+                if mode == "missing":
+                    return False             # keep existing untouched
+                return cached.source_text != current  # sync: regenerate only if changed
+
             # Whole-document summary first (additive parents build on it).
-            if only_missing and DOC_ID in _STORE:
-                skipped += 1
-            else:
+            if _needs(DOC_ID, whole_text):
                 tokens += _est_tokens(whole_text)
                 put(Summary(DOC_ID, "Document", summarize(whole_text, [], provider), whole_text, now))
                 generated += 1
+            else:
+                skipped += 1
 
             for s in sorted(sections, key=lambda s: (s.level, s.start_line)):
-                if only_missing and s.id in _STORE:
+                if not _needs(s.id, s.text):
                     skipped += 1
                     continue
                 parents = _parents_for_section(sections, s)
@@ -228,7 +245,7 @@ def refresh(sections: list[Section], blocks: list[Block], whole_text: str, provi
                 generated += 1
 
             for b in blocks:
-                if only_missing and b.id in _STORE:
+                if not _needs(b.id, b.text):
                     skipped += 1
                     continue
                 parents = _parents_for_block(sections, b)
@@ -287,6 +304,10 @@ def estimate(sections: list[Section], blocks: list[Block], mode: str) -> dict:
         sec_targets = [s for s in sections if s.id not in _STORE]
         block_targets = [b for b in blocks if b.id not in _STORE]
         include_doc = DOC_ID not in _STORE
+    elif mode == "sync":
+        sec_targets = [s for s in sections if s.id not in _STORE or _STORE[s.id].source_text != s.text]
+        block_targets = [b for b in blocks if b.id not in _STORE or _STORE[b.id].source_text != b.text]
+        include_doc = DOC_ID not in _STORE  # whole_text not available here
     else:  # invalidated
         sec_targets = [s for s in sections if s.id in _STORE]
         block_targets = [b for b in blocks if b.id in _STORE]
