@@ -245,8 +245,8 @@ def summaries_refresh(req: SummariesRefreshRequest) -> dict:
     except ValueError as e:
         return {"generated": 0, "checked": 0, "skipped": 0, "tokens": 0, "error": str(e)}
     result = summ.refresh(sections, blocks, req.text, d, req.mode)
-    if _current_name:
-        summ.save(_summ_path(_current_name))  # persist so a reopen reuses them
+    if _current_name and summ._STORE:  # only persist when there's something to save
+        summ.save(_summ_path(_current_name))  # so a reopen reuses them
     result["usage"] = prov.usage_totals()
     return result
 
