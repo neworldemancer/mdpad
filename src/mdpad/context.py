@@ -95,20 +95,21 @@ def build_context(
         owner = next((s for s in sections if s.id == target_block.section_id), None)
         chain = (ancestors(sections, owner) + [owner]) if owner is not None else []
         for anc in chain:
-            prefix = "#" * anc.level
             prev_s, next_s = adjacent(sections, anc)
+            # Each entry is labelled by its OWN title + role, so a neighbour reads
+            # "(next) Mode Occupation", not the current section's title.
             if prev_s is not None:
-                raw.append((f"{prefix} {anc.title} (prev)", _summary_for(prev_s, store)))
-            raw.append((f"{prefix} {anc.title}", _summary_for(anc, store)))
+                raw.append((f"(previous) {prev_s.title}", _summary_for(prev_s, store)))
+            raw.append((f"(current) {anc.title}", _summary_for(anc, store)))
             if next_s is not None:
-                raw.append((f"{prefix} {anc.title} (next)", _summary_for(next_s, store)))
+                raw.append((f"(next) {next_s.title}", _summary_for(next_s, store)))
 
         prev_b, next_b = block_adjacent(blocks, target_block)
         if prev_b is not None:
-            raw.append(("Previous paragraph", _summary_for(prev_b, store)))
-        raw.append(("Current paragraph", target_block.text))
+            raw.append(("(previous) paragraph", _summary_for(prev_b, store)))
+        raw.append(("(current) paragraph", target_block.text))
         if next_b is not None:
-            raw.append(("Next paragraph", _summary_for(next_b, store)))
+            raw.append(("(next) paragraph", _summary_for(next_b, store)))
 
     raw.append(("Selected text", selection.strip()))
     raw.append(("Instruction", instruction.strip()))

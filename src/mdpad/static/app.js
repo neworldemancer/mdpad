@@ -535,7 +535,7 @@ async function refreshContextMap() {
     const row = document.createElement("div"); row.className = "map-row";
     const label = document.createElement("div"); label.className = "map-label"; label.textContent = it.label;
     const text = document.createElement("div");
-    text.className = "map-text" + (it.label === "Current paragraph" ? " current" : "");
+    text.className = "map-text" + (it.label === "(current) paragraph" ? " current" : "");
     text.textContent = it.text;
     row.appendChild(label); row.appendChild(text);
     el.appendChild(row);

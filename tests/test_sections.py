@@ -230,12 +230,12 @@ def test_context_package_order_and_totals():
     assert [i.label for i in pkg.items] == [
         "Project summary",
         "Document summary",
-        "# Chapter",
-        "## Alpha",
-        "## Alpha (next)",
-        "Previous paragraph",
-        "Current paragraph",
-        "Next paragraph",
+        "(current) Chapter",
+        "(current) Alpha",
+        "(next) Beta",
+        "(previous) paragraph",
+        "(current) paragraph",
+        "(next) paragraph",
         "Selected text",
         "Instruction",
     ]
@@ -270,12 +270,12 @@ def test_context_uses_cached_summaries_not_full_text_for_neighbors():
     )
     by_label = {i.label: i.text for i in pkg.items}
     assert by_label["Document summary"] == "Doc-level summary."
-    assert by_label["# Chapter"] == "Chapter overview."
-    assert by_label["## Alpha (next)"] == "Beta covers XYZ."
-    assert by_label["Previous paragraph"] == "Chapter's intro, in short."
-    assert by_label["Next paragraph"] == "Beta's paragraph, in short."
-    assert by_label["Current paragraph"] == "alpha body"
-    assert "beta body" not in by_label["## Alpha (next)"]
+    assert by_label["(current) Chapter"] == "Chapter overview."
+    assert by_label["(next) Beta"] == "Beta covers XYZ."
+    assert by_label["(previous) paragraph"] == "Chapter's intro, in short."
+    assert by_label["(next) paragraph"] == "Beta's paragraph, in short."
+    assert by_label["(current) paragraph"] == "alpha body"
+    assert "beta body" not in by_label["(next) Beta"]
 
 
 def test_context_target_none_omits_ancestor_and_paragraph_items():
@@ -316,10 +316,10 @@ def test_revise_endpoint_sends_full_paragraph_and_section_summaries():
     assert data["section"] == "Alpha"
 
     items = {i["label"]: i["text"] for i in data["context"]["items"]}
-    assert items["Current paragraph"] == "alpha body"
-    assert "# Chapter" in items
-    assert "## Alpha" in items
-    assert "## Alpha (next)" in items  # Beta is Alpha's next sibling
-    assert "Previous paragraph" in items  # Chapter's intro paragraph
-    assert "Next paragraph" in items  # Beta's paragraph
+    assert items["(current) paragraph"] == "alpha body"
+    assert "(current) Chapter" in items
+    assert "(current) Alpha" in items
+    assert "(next) Beta" in items  # Beta is Alpha's next sibling
+    assert "(previous) paragraph" in items  # Chapter's intro paragraph
+    assert "(next) paragraph" in items  # Beta's paragraph
     reset_summaries()
