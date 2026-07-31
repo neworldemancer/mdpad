@@ -32,7 +32,8 @@ DOC_ID = "__doc__"
 SUMMARIZE_SYSTEM = (
     "Summarize in 1-3 sentences. The reader already has the parent context "
     "below; do NOT repeat it -- add only what is new and specific to this "
-    "text. Output only the summary."
+    "text. Keep any mathematics as LaTeX delimited by $...$ (inline) or "
+    "$$...$$ (display); never use \\(...\\) or \\[...\\]. Output only the summary."
 )
 CHANGE_GATE_SYSTEM = (
     "You get a section's current summary and a unified diff of edits. Answer "

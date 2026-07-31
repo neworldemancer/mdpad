@@ -38,7 +38,9 @@ function renderMath() {
     window.renderMathInElement(preview, {
       delimiters: [
         { left: "$$", right: "$$", display: true },
+        { left: "\\[", right: "\\]", display: true },
         { left: "$", right: "$", display: false },
+        { left: "\\(", right: "\\)", display: false },
       ],
       throwOnError: false,
     });
@@ -642,7 +644,12 @@ function showTip(summary, x, y) {
   tip.textContent = summary || "";
   if (window.renderMathInElement) {
     window.renderMathInElement(tip, {
-      delimiters: [{ left: "$$", right: "$$", display: true }, { left: "$", right: "$", display: false }],
+      delimiters: [
+        { left: "$$", right: "$$", display: true },
+        { left: "\\[", right: "\\]", display: true },
+        { left: "$", right: "$", display: false },
+        { left: "\\(", right: "\\)", display: false },
+      ],
       throwOnError: false,
     });
   }
