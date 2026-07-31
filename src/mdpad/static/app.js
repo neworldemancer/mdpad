@@ -637,7 +637,9 @@ function _tipped(el, text) {
 // `title` attribute can only show plain text).
 function showTip(summary, x, y) {
   const tip = $("map-tip");
-  tip.innerHTML = md.render(summary || "");
+  // Set raw text (not markdown-it) so KaTeX sees intact $...$ / backslashes;
+  // markdown would eat "_", strip escapes, and break the math.
+  tip.textContent = summary || "";
   if (window.renderMathInElement) {
     window.renderMathInElement(tip, {
       delimiters: [{ left: "$$", right: "$$", display: true }, { left: "$", right: "$", display: false }],
