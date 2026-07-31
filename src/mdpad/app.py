@@ -295,6 +295,17 @@ def context_map(req: ContextMapRequest) -> dict:
     }
 
 
+@app.middleware("http")
+async def _revalidate_assets(request, call_next):
+    """Always revalidate the app's HTML/CSS/JS so edits show up on a normal reload
+    (no hard-refresh needed). Vendored libs (fonts/KaTeX) stay cacheable."""
+    resp = await call_next(request)
+    p = request.url.path
+    if p == "/" or (p.startswith("/static/") and "/vendor/" not in p):
+        resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")
 
 

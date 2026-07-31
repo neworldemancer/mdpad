@@ -609,7 +609,7 @@ function renderMapText(el, levels) {
       if (!node) return;
       const row = document.createElement("div");
       row.className = "map-tree-row" + (isCurrent ? " current" : "");
-      row.title = node.summary || "";
+      attachTip(row, node.summary || node.title);
       const dot = document.createElement("span");
       dot.className = "dot state-" + (node.state || "missing");
       const t = document.createElement("span");
@@ -631,6 +631,37 @@ function _svg(tag, attrs) {
 }
 function _tipped(el, text) {
   const t = _svg("title", {}); t.textContent = text || ""; el.appendChild(t); return el;
+}
+
+// Custom hover tooltip that renders the summary as markdown + KaTeX (the native
+// `title` attribute can only show plain text).
+function showTip(summary, x, y) {
+  const tip = $("map-tip");
+  tip.innerHTML = md.render(summary || "");
+  if (window.renderMathInElement) {
+    window.renderMathInElement(tip, {
+      delimiters: [{ left: "$$", right: "$$", display: true }, { left: "$", right: "$", display: false }],
+      throwOnError: false,
+    });
+  }
+  tip.hidden = false;
+  posTip(x, y);
+}
+function posTip(x, y) {
+  const tip = $("map-tip");
+  if (tip.hidden) return;
+  const pad = 14, r = tip.getBoundingClientRect();
+  let px = x + pad, py = y + pad;
+  if (px + r.width > window.innerWidth) px = x - r.width - pad;
+  if (py + r.height > window.innerHeight) py = window.innerHeight - r.height - pad;
+  tip.style.left = Math.max(4, px) + "px";
+  tip.style.top = Math.max(4, py) + "px";
+}
+function hideTip() { $("map-tip").hidden = true; }
+function attachTip(el, summary) {
+  el.addEventListener("mouseenter", (e) => showTip(summary, e.clientX, e.clientY));
+  el.addEventListener("mousemove", (e) => posTip(e.clientX, e.clientY));
+  el.addEventListener("mouseleave", hideTip);
 }
 // A node-link view: current nodes form the vertical spine; each splits into the
 // next level's previous/current/next. Title in the circle's label, summary on hover.
@@ -658,12 +689,12 @@ function renderMapVisual(el, levels) {
       const { x, y } = pos(i, role);
       const isCur = role === "current";
       const g = _svg("g", { class: "map-node" + (isCur ? " cur" : "") + " state-" + (n.state || "missing") });
-      g.appendChild(_tipped(_svg("circle", { cx: x, cy: y, r: isCur ? r + 3 : r }), n.summary || n.title));
+      g.appendChild(_svg("circle", { cx: x, cy: y, r: isCur ? r + 3 : r }));
       const label = _svg("text", { x: x, y: y + (isCur ? r + 3 : r) + 12, "text-anchor": "middle", class: "map-node-label" });
       const words = (n.title || "").split(/\s+/).slice(0, 3).join(" ");
       label.textContent = words.length > 18 ? words.slice(0, 17) + "…" : words;
-      _tipped(label, n.summary || n.title);
       g.appendChild(label);
+      attachTip(g, n.summary || n.title);
       svg.appendChild(g);
     });
   });

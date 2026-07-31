@@ -119,6 +119,14 @@ body {
 .map-node.state-current circle { stroke: var(--ink); fill: var(--accent-soft); }
 .map-node-label { font-family: var(--font-ui); font-size: 10px; fill: var(--ink); pointer-events: none; }
 
+.map-tip {
+  position: fixed; z-index: 50; max-width: 320px; pointer-events: none;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line);
+  border-radius: 8px; box-shadow: var(--shadow); padding: 8px 10px;
+  font-family: var(--font-read); font-size: 13px; line-height: 1.45;
+}
+.map-tip p { margin: 0; }
+
 /* context tree (Task 08) */
 .map-tree { padding: 4px 0 10px; }
 .map-level-block { margin: 4px 0; }
