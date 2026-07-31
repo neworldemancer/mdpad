@@ -524,9 +524,9 @@ function setSidebar(open) {
   sidebarOpen = open;
   localStorage.setItem("mdpad.sidebarOpen", open ? "1" : "0");
   const saved = JSON.parse(localStorage.getItem("mdpad.layout") || "{}");
-  document.querySelector(".workspace").style.setProperty("--w-sidebar", open ? (saved.sidebar || 232) + "px" : "0");
-  const gutter = document.querySelector('.gutter[data-resize="sidebar"]');
-  if (gutter) gutter.hidden = !open;
+  const ws = document.querySelector(".workspace");
+  ws.style.setProperty("--w-sidebar", open ? (saved.sidebar || 232) + "px" : "0");
+  ws.style.setProperty("--gw-sidebar", open ? "6px" : "0");  // collapse the gutter column too
   if (open) $("settings").hidden = false;
 }
 
@@ -538,9 +538,9 @@ function setMap(open) {
   mapOpen = open;
   localStorage.setItem("mdpad.mapOpen", open ? "1" : "0");
   const saved = JSON.parse(localStorage.getItem("mdpad.layout") || "{}");
-  document.querySelector(".workspace").style.setProperty("--w-map", open ? (saved.map || 300) + "px" : "0");
-  const gutter = document.querySelector('.gutter[data-resize="map"]');
-  if (gutter) gutter.hidden = !open;
+  const ws = document.querySelector(".workspace");
+  ws.style.setProperty("--w-map", open ? (saved.map || 300) + "px" : "0");
+  ws.style.setProperty("--gw-map", open ? "6px" : "0");  // collapse the gutter column too
   $("map-toggle").classList.toggle("on", open);
   if (open) refreshContextMap();
 }

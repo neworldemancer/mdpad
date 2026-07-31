@@ -93,7 +93,7 @@ body {
 /* ---- workspace grid --------------------------------------------------- */
 .workspace {
   display: grid;
-  grid-template-columns: var(--w-sidebar, 232px) 6px var(--w-editor, 1fr) 6px 1fr 6px var(--w-map, 0);
+  grid-template-columns: var(--w-sidebar, 232px) var(--gw-sidebar, 6px) var(--w-editor, 1fr) 6px 1fr var(--gw-map, 0) var(--w-map, 0);
   min-height: 0;
 }
 
