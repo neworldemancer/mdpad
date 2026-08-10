@@ -399,6 +399,20 @@ async function openFile(name) {
   toast("Opened " + name);
 }
 
+function newFile() {
+  if (dirty && !confirm("Discard unsaved changes?")) return;
+  editor.value = "# Untitled\n\n";
+  currentName = null;             // unsaved; Save will prompt for a name
+  dirty = false;
+  $("file-open").value = "";
+  closeDock();
+  renderPreview(); buildOutline(); markActiveSection(); updateFilename();
+  refreshSummaryStatus(); refreshContextMap();
+  editor.focus();
+  editor.setSelectionRange(editor.value.length, editor.value.length);
+  toast("New document");
+}
+
 async function saveFile() {
   let name = currentName;
   if (!name) {
@@ -779,6 +793,7 @@ $("file-open").addEventListener("change", (e) => {
   openFile(name);
 });
 $("save").addEventListener("click", saveFile);
+$("new-file").addEventListener("click", newFile);
 $("regen-summaries").addEventListener("click", regenerateSummaries);
 
 // ---- boot ---------------------------------------------------------------
