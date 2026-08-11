@@ -16,9 +16,11 @@ import httpx
 SYSTEM_PROMPT = (
     "You are a scientific writing assistant. Revise the SELECTED TEXT only, "
     "following the user's instruction. Never invent citations. Preserve LaTeX "
-    "math verbatim unless the instruction is about the math. Distinguish "
-    "established facts from hypotheses. Respond with STRICT JSON and nothing "
-    'else: {"replacement_text": str, "explanation": str, "warnings": [str]}.'
+    "math verbatim unless the instruction is about the math. Always delimit "
+    "mathematics with $...$ (inline) or $$...$$ (display); never use \\(...\\) "
+    "or \\[...\\]. Distinguish established facts from hypotheses. Respond with "
+    'STRICT JSON and nothing else: {"replacement_text": str, "explanation": '
+    'str, "warnings": [str]}.'
 )
 
 
