@@ -47,9 +47,18 @@ function renderMath() {
   }
 }
 
+// Convert LaTeX \(...\) / \[...\] delimiters to $...$ / $$...$$ so they survive
+// markdown-it (which strips the backslash before "[" or "(", eating the
+// delimiter) and reach KaTeX. Skips escaped "\\[" (matrix line-break spacing).
+function normalizeMath(s) {
+  return s
+    .replace(/(?<!\\)\\\[/g, "$$$$").replace(/(?<!\\)\\\]/g, "$$$$")
+    .replace(/(?<!\\)\\\(/g, "$").replace(/(?<!\\)\\\)/g, "$");
+}
+
 let renderTimer = null;
 function renderPreview() {
-  preview.innerHTML = md.render(editor.value);
+  preview.innerHTML = md.render(normalizeMath(editor.value));
   renderMath();
   syncFromEditor(false);
 }
@@ -654,8 +663,9 @@ function _tipped(el, text) {
 function showTip(summary, x, y) {
   const tip = $("map-tip");
   // Set raw text (not markdown-it) so KaTeX sees intact $...$ / backslashes;
-  // markdown would eat "_", strip escapes, and break the math.
-  tip.textContent = summary || "";
+  // markdown would eat "_", strip escapes, and break the math. Normalize
+  // \(...\)/\[...\] to $ so KaTeX auto-render picks them up consistently.
+  tip.textContent = normalizeMath(summary || "");
   if (window.renderMathInElement) {
     window.renderMathInElement(tip, {
       delimiters: [
