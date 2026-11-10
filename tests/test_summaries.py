@@ -314,12 +314,12 @@ def test_validity_states():
     b = next(s for s in secs if s.title == "B")
     now = time.time()
     summaries._STORE.clear()
-    summaries._STORE[a.id] = Summary(a.id, "A", "s", a.text, now)             # unchanged
-    summaries._STORE[b.id] = Summary(b.id, "B", "s", "OLD", now)             # changed, fresh
+    summaries._STORE[a.id] = Summary(a.id, "A", "s", a.text, now)  # unchanged
+    summaries._STORE[b.id] = Summary(b.id, "B", "s", "OLD", now)  # changed, fresh
     v = summaries.validity(secs, blocks, doc)
     assert v[a.id] == "valid"
     assert v[b.id] == "stale"
     assert v[blocks[0].id] == "missing"
-    summaries._STORE[b.id] = Summary(b.id, "B", "s", "OLD", now - 10_000)    # changed, old
+    summaries._STORE[b.id] = Summary(b.id, "B", "s", "OLD", now - 10_000)  # changed, old
     assert summaries.validity(secs, blocks, doc)[b.id] == "expired"
     summaries._STORE.clear()

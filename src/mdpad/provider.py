@@ -156,7 +156,7 @@ def _extract_json(content: str) -> str:
     if "</think>" in s:
         s = s.rsplit("</think>", 1)[1]
     i, j = s.find("{"), s.rfind("}")
-    return s[i:j + 1] if i != -1 and j > i else s.strip()
+    return s[i : j + 1] if i != -1 and j > i else s.strip()
 
 
 def _validate(content: str) -> Proposal:

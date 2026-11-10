@@ -21,8 +21,8 @@ class Section:
     title: str
     level: int
     start_line: int  # 0-based, inclusive
-    end_line: int    # 0-based, exclusive
-    text: str        # raw section text, heading included
+    end_line: int  # 0-based, exclusive
+    text: str  # raw section text, heading included
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -46,7 +46,7 @@ def parse_sections(text: str) -> list[Section]:
     seen: dict[str, int] = {}
     for n, (line_i, level, title) in enumerate(heads):
         end = len(lines)
-        for line_j, lvl_j, _ in heads[n + 1:]:
+        for line_j, lvl_j, _ in heads[n + 1 :]:
             if lvl_j <= level:
                 end = line_j
                 break
@@ -109,9 +109,9 @@ class Block:
 
     id: str
     section_id: str
-    index: int       # 0-based position among this section's blocks
+    index: int  # 0-based position among this section's blocks
     start_line: int  # 0-based, inclusive
-    end_line: int    # 0-based, exclusive
+    end_line: int  # 0-based, exclusive
     text: str
 
     def as_dict(self) -> dict:
@@ -192,8 +192,7 @@ def parse_blocks(text: str) -> list[Block]:
             continue
 
         prev_group = groups[-1] if groups else None
-        has_prev = prev_group is not None and prev_group[-1]["section_id"] == seg["section_id"]
-        if has_prev:
+        if prev_group is not None and prev_group[-1]["section_id"] == seg["section_id"]:
             prev_group.append(seg)
             i += 1
             nxt = segments[i] if i < m else None
@@ -203,7 +202,7 @@ def parse_blocks(text: str) -> list[Block]:
                 and nxt["section_id"] == seg["section_id"]
                 and lines[nxt["start"]].lstrip()[:1].islower()
             )
-            if starts_lower:
+            if starts_lower and nxt is not None:
                 prev_group.append(nxt)
                 i += 1
         else:

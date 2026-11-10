@@ -62,7 +62,7 @@ def load(path) -> int:
         return 0
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except OSError, json.JSONDecodeError:
         return 0
     for key, d in data.items():
         try:
@@ -199,13 +199,17 @@ def refresh(sections: list[Section], blocks: list[Block], whole_text: str, provi
         if mode == "all":
             pending = len(sections) + len(blocks) + 1
         elif mode == "missing":
-            pending = (sum(1 for s in sections if s.id not in _STORE)
-                       + sum(1 for b in blocks if b.id not in _STORE)
-                       + (0 if DOC_ID in _STORE else 1))
+            pending = (
+                sum(1 for s in sections if s.id not in _STORE)
+                + sum(1 for b in blocks if b.id not in _STORE)
+                + (0 if DOC_ID in _STORE else 1)
+            )
         elif mode == "sync":
-            pending = (sum(1 for s in sections if _stale(s.id, s.text))
-                       + sum(1 for b in blocks if _stale(b.id, b.text))
-                       + (1 if _stale(DOC_ID, whole_text) else 0))
+            pending = (
+                sum(1 for s in sections if _stale(s.id, s.text))
+                + sum(1 for b in blocks if _stale(b.id, b.text))
+                + (1 if _stale(DOC_ID, whole_text) else 0)
+            )
         else:
             pending = len(_STORE)
         return {
@@ -218,14 +222,15 @@ def refresh(sections: list[Section], blocks: list[Block], whole_text: str, provi
 
     try:
         if mode in ("all", "missing", "sync"):
+
             def _needs(uid: str, current: str) -> bool:
                 cached = _STORE.get(uid)
                 if cached is None:
-                    return True              # generate absent (all/missing/sync)
+                    return True  # generate absent (all/missing/sync)
                 if mode == "all":
-                    return True              # force regenerate everything
+                    return True  # force regenerate everything
                 if mode == "missing":
-                    return False             # keep existing untouched
+                    return False  # keep existing untouched
                 return cached.source_text != current  # sync: regenerate only if changed
 
             # Whole-document summary first (additive parents build on it).
@@ -278,7 +283,7 @@ def refresh(sections: list[Section], blocks: list[Block], whole_text: str, provi
                 if summary_changed(summ.summary, diff, provider):
                     tokens += _est_tokens(current_text)
                     if sid == DOC_ID:
-                        parents: list[str] = []
+                        parents = []
                     elif sid in by_sec:
                         parents = _parents_for_section(sections, by_sec[sid])
                     else:
@@ -333,8 +338,13 @@ def _state(cached: Summary | None, current_text: str, now: float) -> str:
     return "stale" if (now - cached.generated_at) <= STALE_AFTER_S else "expired"
 
 
-def validity(sections: list[Section], blocks: list[Block], whole_text: str = "",
-             store: dict[str, Summary] | None = None, now: float | None = None) -> dict[str, str]:
+def validity(
+    sections: list[Section],
+    blocks: list[Block],
+    whole_text: str = "",
+    store: dict[str, Summary] | None = None,
+    now: float | None = None,
+) -> dict[str, str]:
     """Map each unit id (sections, blocks, and ``__doc__`` when ``whole_text`` is
     given) to its validity state: ``valid`` | ``stale`` | ``expired`` | ``missing``."""
     store = _STORE if store is None else store

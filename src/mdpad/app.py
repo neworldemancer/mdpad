@@ -32,7 +32,8 @@ load_dotenv()
 # sent to the browser; blank means no server default (offline mock unless a
 # request supplies its own base URL + key). GPUSTACK_TEST_API_KEY is a legacy
 # alias kept for existing `.env` files.
-SERVER_API_KEY = os.getenv("MDPAD_API_KEY") or os.getenv("GPUSTACK_TEST_API_KEY", "")
+_server_api_key = os.getenv("MDPAD_API_KEY") or os.getenv("GPUSTACK_TEST_API_KEY")
+SERVER_API_KEY: str = _server_api_key if _server_api_key else ""
 SERVER_BASE_URL = (os.getenv("MDPAD_BASE_URL") or "").rstrip("/")
 
 _HERE = Path(__file__).parent
@@ -314,9 +315,7 @@ def history_status() -> dict:
         return {"total_bytes": 0}
     cutoff = time.time() - HISTORY_RETENTION_DAYS * 86400
     total = sum(
-        f.stat().st_size
-        for f in history_dir.glob("*.md")
-        if f.name != "keepforever.md" and f.stat().st_mtime < cutoff
+        f.stat().st_size for f in history_dir.glob("*.md") if f.name != "keepforever.md" and f.stat().st_mtime < cutoff
     )
     return {"total_bytes": total}
 
@@ -346,7 +345,7 @@ def history_cleanup(req: HistoryCleanupRequest) -> dict:
 
 @app.post("/api/revise")
 def revise(req: ReviseRequest) -> dict:
-    selection = req.text[req.sel_start:req.sel_end]
+    selection = req.text[req.sel_start : req.sel_end]
     sections = parse_sections(req.text)
     blocks = parse_blocks(req.text)
     target_block = block_at(blocks, req.sel_start, req.text)
@@ -437,8 +436,11 @@ def context_map(req: ContextMapRequest) -> dict:
         "counts": summ.status(sections, blocks, req.text),
         "current": target.id if target else None,
         "tree": ctx.build_tree(
-            sections=sections, blocks=blocks, target_block=target,
-            store=summ._STORE, states=summ.validity(sections, blocks, req.text),
+            sections=sections,
+            blocks=blocks,
+            target_block=target,
+            store=summ._STORE,
+            states=summ.validity(sections, blocks, req.text),
         ),
     }
 

@@ -234,8 +234,8 @@ def test_context_package_order_and_totals():
         "L2 (current) Alpha",
         "L2 (next) Beta",
         "L2 (previous) paragraph",  # intro line, under Chapter (L1) -> L2
-        "L3 (current) paragraph",   # alpha body, under Alpha (L2) -> L3
-        "L3 (next) paragraph",      # beta body, under Beta (L2) -> L3
+        "L3 (current) paragraph",  # alpha body, under Alpha (L2) -> L3
+        "L3 (next) paragraph",  # beta body, under Beta (L2) -> L3
         "Selected text",
         "Instruction",
     ]
