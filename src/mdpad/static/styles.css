@@ -367,3 +367,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, .outline li:f
   color: var(--ink-soft);
   max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+
+/* ---- mermaid diagrams --------------------------------------------------- */
+.preview .mermaid {
+  overflow-x: auto; display: block; margin: 1em 0; text-align: center;
+}

@@ -56,10 +56,36 @@ function normalizeMath(s) {
     .replace(/(?<!\\)\\\(/g, "$").replace(/(?<!\\)\\\)/g, "$");
 }
 
+let mermaidReady = false;
+if (window.mermaid) {
+  window.mermaid.initialize({ startOnLoad: false, securityLevel: "strict" });
+  mermaidReady = true;
+}
+
+let mermaidSeq = 0;
+async function renderMermaid() {
+  if (!mermaidReady) return;
+  const blocks = [...preview.querySelectorAll("pre > code.language-mermaid")];
+  for (const code of blocks) {
+    const pre = code.parentElement;
+    const div = document.createElement("div");
+    div.className = "mermaid";
+    const id = "mermaid-" + (mermaidSeq++);
+    try {
+      const { svg } = await window.mermaid.render(id, code.textContent);
+      div.innerHTML = svg;
+    } catch (e) {
+      div.textContent = "Mermaid error: " + e.message;
+    }
+    pre.replaceWith(div);
+  }
+}
+
 let renderTimer = null;
 function renderPreview() {
   preview.innerHTML = md.render(normalizeMath(editor.value));
   renderMath();
+  renderMermaid();
   syncFromEditor(false);
 }
 function scheduleRender() {
