@@ -16,6 +16,7 @@ dependencies = [
 
 [project.scripts]
 mdpad = "mdpad:main"
+mdpad-configure = "mdpad.configure:main"
 
 [build-system]
 requires = ["uv_build>=0.10.0,<0.11.0"]

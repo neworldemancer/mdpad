@@ -22,6 +22,14 @@ select → context → diff → accept flow. For real edits, open **Settings** a
 enter an OpenAI-compatible endpoint (OpenAI, OpenRouter, LM Studio, Ollama, …):
 base URL, API key, and model. Settings are stored in your browser only.
 
+To set a server-side default instead (so the key never has to be typed into
+the browser, or lives in source/git), write it to a local `.env`:
+
+```powershell
+uv run mdpad-configure --base-url https://host/v1 --api-key sk-...
+# or run with no flags to be prompted instead
+```
+
 > Note: the preview libraries (markdown-it, KaTeX) currently load from a CDN, so
 > the preview needs internet access. Vendoring them for fully-offline use is a
 > planned hardening step.
@@ -41,5 +49,6 @@ install.bat          # editable install into the active/local venv
 ```
 
 Layout: Python backend in `src/mdpad/` (`app.py`, `sections.py`, `context.py`,
-`provider.py`); zero-build frontend in `src/mdpad/static/`. See `CLAUDE.md` for
-the architecture and the deliberate no-React stack decision.
+`provider.py`); zero-build frontend in `src/mdpad/static/` — vanilla HTML/CSS/JS,
+no React/TypeScript/bundler, a deliberate choice to keep everything in Python
+except the thin UI layer. See `docs/architecture.md` for the codebase map.

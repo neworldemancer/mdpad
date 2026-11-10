@@ -15,6 +15,13 @@ wheels/
 # Tooling caches
 .pytest_cache/
 graphify-out/
+.claude/
+
+# Local AI-assistant instructions (not part of the published project)
+CLAUDE.md
 
 # Per-document summary cache
 *.summ.json
+
+# User documents created by the app's Projects feature
+/projects/

@@ -1,10 +1,10 @@
 """FastAPI application: serves the single-page workspace and its JSON endpoints.
 
 Provider config lives in the browser (localStorage) and travels with each revise
-request. The API key can also be supplied server-side via a ``.env`` file
-(``GPUSTACK_TEST_API_KEY``) so it is never exposed to client code; the browser
-then only picks a model. A blank field in a request falls back to the server
-default (base URL + key).
+request. The base URL and API key can also be supplied server-side via a
+``.env`` file (``MDPAD_BASE_URL`` / ``MDPAD_API_KEY`` — see ``mdpad-configure``)
+so the key is never exposed to client code; the browser then only picks a
+model. A blank field in a request falls back to the server default.
 """
 
 from __future__ import annotations
@@ -28,10 +28,12 @@ from . import summaries as summ
 from .sections import block_at, parse_blocks, parse_sections
 
 load_dotenv()
-# Server-side provider defaults. The key is read from .env and never sent to the
-# browser; base URL defaults to the GPUStack endpoint but is overridable per-request.
-SERVER_API_KEY = os.getenv("GPUSTACK_TEST_API_KEY", "")
-SERVER_BASE_URL = (os.getenv("MDPAD_BASE_URL") or "https://api.openai.com/v1").rstrip("/")
+# Server-side provider defaults, set via `.env` (see `mdpad-configure`). Never
+# sent to the browser; blank means no server default (offline mock unless a
+# request supplies its own base URL + key). GPUSTACK_TEST_API_KEY is a legacy
+# alias kept for existing `.env` files.
+SERVER_API_KEY = os.getenv("MDPAD_API_KEY") or os.getenv("GPUSTACK_TEST_API_KEY", "")
+SERVER_BASE_URL = (os.getenv("MDPAD_BASE_URL") or "").rstrip("/")
 
 _HERE = Path(__file__).parent
 _STATIC = _HERE / "static"

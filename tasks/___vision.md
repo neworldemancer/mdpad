@@ -725,7 +725,7 @@ The prototype is successful when a user can:
 * model cost reporting;
 * optional collaboration.
 
-## 23. First Claude Code instruction
+## 23. Initial build instruction
 
 Build Phase 1 and the smallest viable part of Phase 2.
 
