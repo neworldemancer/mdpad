@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import os
 import re
+import time
 import webbrowser
+from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -45,27 +47,74 @@ _PROJECT_SUMMARY = (
 _current_doc = _DEFAULT_DOC
 _current_name: str | None = None
 
-# Open/Save operate on Markdown files in the folder mdpad was launched from.
-DOCS_DIR = Path.cwd()
+# Projects: each is a folder of flat .md files (+ .summ.json sidecars) plus a
+# shared history/ of save snapshots. PROJECTS_ROOT is where "New Project"
+# creates one by default; PROJECT_DIR is whichever project is currently open
+# (None until one is opened/created -- open/save/history are gated on it).
+PROJECTS_ROOT = Path.cwd() / "projects"
+PROJECT_DIR: Path | None = None
 _NAME_RE = re.compile(r"^[\w.\-]+\.md$")
+_PROJECT_NAME_RE = re.compile(r"^[\w.\- ]+$")
+HISTORY_RETENTION_DAYS = 30
 DEFAULT_PORT = 8670
 
 app = FastAPI(title="mdpad")
 
 
+def _require_project() -> Path:
+    if PROJECT_DIR is None:
+        raise HTTPException(400, "No project is open. Create or open a project first.")
+    return PROJECT_DIR
+
+
 def _safe_doc_path(name: str) -> Path:
-    """Resolve ``name`` to a .md file directly inside DOCS_DIR (no traversal)."""
+    """Resolve ``name`` to a .md file directly inside PROJECT_DIR (no traversal)."""
+    project_dir = _require_project()
     if not _NAME_RE.match(name):
         raise HTTPException(400, "Invalid filename (use letters, digits, . - _ and a .md extension).")
-    path = (DOCS_DIR / name).resolve()
-    if path.parent != DOCS_DIR.resolve():
-        raise HTTPException(400, "Filename must not point outside the documents folder.")
+    path = (project_dir / name).resolve()
+    if path.parent != project_dir.resolve():
+        raise HTTPException(400, "Filename must not point outside the project folder.")
     return path
 
 
 def _summ_path(name: str) -> Path:
     """Sidecar file caching a document's summaries: ``<name>.summ.json``."""
-    return DOCS_DIR / f"{name}.summ.json"
+    return _require_project() / f"{name}.summ.json"
+
+
+def _history_dir() -> Path:
+    return _require_project() / "history"
+
+
+def _snapshot_timestamp() -> str:
+    now = datetime.now()
+    return now.strftime("%y%m%d_%H%M%S") + f".{now.microsecond:06d}"
+
+
+def _safe_project_path(name: str) -> Path:
+    """Resolve ``name`` to a project directory directly inside PROJECTS_ROOT."""
+    if not _PROJECT_NAME_RE.match(name):
+        raise HTTPException(400, "Invalid project name (use letters, digits, spaces, . - _).")
+    path = (PROJECTS_ROOT / name).resolve()
+    if path.parent != PROJECTS_ROOT.resolve():
+        raise HTTPException(400, "Project name must not point outside the projects folder.")
+    return path
+
+
+def _open_project(project_dir: Path) -> None:
+    global PROJECT_DIR, _current_doc, _current_name
+    PROJECT_DIR = project_dir
+    files = sorted(p.name for p in project_dir.glob("*.md") if p.is_file())
+    first = files[0] if files else None
+    if first:
+        _current_doc = (project_dir / first).read_text(encoding="utf-8")
+        _current_name = first
+        summ.load(_summ_path(first))
+    else:
+        _current_doc = ""
+        _current_name = None
+        summ.reset()
 
 
 class ProviderSettings(BaseModel):
@@ -163,8 +212,10 @@ def list_models_endpoint(base_url: str = "", api_key: str = "") -> dict:
 
 @app.get("/api/files")
 def list_files() -> dict:
-    files = sorted(p.name for p in DOCS_DIR.glob("*.md") if p.is_file())
-    return {"dir": str(DOCS_DIR), "files": files, "current": _current_name}
+    if PROJECT_DIR is None:
+        return {"dir": None, "files": [], "current": _current_name}
+    files = sorted(p.name for p in PROJECT_DIR.glob("*.md") if p.is_file())
+    return {"dir": str(PROJECT_DIR), "files": files, "current": _current_name}
 
 
 class SaveRequest(BaseModel):
@@ -177,7 +228,7 @@ def read_file(name: str) -> dict:
     global _current_doc, _current_name
     path = _safe_doc_path(name)
     if not path.is_file():
-        raise HTTPException(404, f"No such file in {DOCS_DIR}: {name}")
+        raise HTTPException(404, f"No such file in {PROJECT_DIR}: {name}")
     _current_doc = path.read_text(encoding="utf-8")
     _current_name = name
     summ.load(_summ_path(name))  # reuse this doc's cached summaries if present
@@ -193,7 +244,102 @@ def save_file(req: SaveRequest) -> dict:
     _current_name = req.name
     if summ._STORE:  # persist current summaries alongside the document
         summ.save(_summ_path(req.name))
+    history_dir = _history_dir()
+    history_dir.mkdir(exist_ok=True)  # defensive: projects predating this feature
+    (history_dir / f"{req.name}_{_snapshot_timestamp()}.md").write_text(req.text, encoding="utf-8")
     return {"ok": True, "name": req.name}
+
+
+class ProjectCreateRequest(BaseModel):
+    name: str = ""
+    path: str = ""
+
+
+class ProjectOpenRequest(BaseModel):
+    name: str = ""
+    path: str = ""
+
+
+_README_TEMPLATE = "# {name}\n"
+
+
+@app.get("/api/projects")
+def list_projects() -> dict:
+    PROJECTS_ROOT.mkdir(exist_ok=True)
+    projects = sorted(p.name for p in PROJECTS_ROOT.iterdir() if p.is_dir())
+    return {"projects": projects, "current": PROJECT_DIR.name if PROJECT_DIR else None}
+
+
+@app.post("/api/projects")
+def create_project(req: ProjectCreateRequest) -> dict:
+    if req.path:
+        project_dir = Path(req.path).expanduser().resolve()
+        name = project_dir.name
+    elif req.name:
+        project_dir = _safe_project_path(req.name)
+        name = req.name
+    else:
+        raise HTTPException(400, "A project name or path is required.")
+    if project_dir.exists():
+        raise HTTPException(400, f"Project already exists: {project_dir}")
+    project_dir.mkdir(parents=True)
+    (project_dir / "history").mkdir()
+    (project_dir / "README.md").write_text(_README_TEMPLATE.format(name=name), encoding="utf-8")
+    _open_project(project_dir)
+    return list_files()
+
+
+@app.post("/api/projects/open")
+def open_project(req: ProjectOpenRequest) -> dict:
+    if req.path:
+        project_dir = Path(req.path).expanduser().resolve()
+    elif req.name:
+        project_dir = _safe_project_path(req.name)
+    else:
+        raise HTTPException(400, "A project name or path is required.")
+    if not project_dir.is_dir():
+        raise HTTPException(404, f"No such project folder: {project_dir}")
+    _open_project(project_dir)
+    return list_files()
+
+
+@app.get("/api/history/status")
+def history_status() -> dict:
+    if PROJECT_DIR is None:
+        return {"total_bytes": 0}
+    history_dir = PROJECT_DIR / "history"
+    if not history_dir.is_dir() or (history_dir / "keepforever.md").exists():
+        return {"total_bytes": 0}
+    cutoff = time.time() - HISTORY_RETENTION_DAYS * 86400
+    total = sum(
+        f.stat().st_size
+        for f in history_dir.glob("*.md")
+        if f.name != "keepforever.md" and f.stat().st_mtime < cutoff
+    )
+    return {"total_bytes": total}
+
+
+class HistoryCleanupRequest(BaseModel):
+    action: str  # "delete" | "keep_forever" | "skip"
+
+
+@app.post("/api/history/cleanup")
+def history_cleanup(req: HistoryCleanupRequest) -> dict:
+    if PROJECT_DIR is None:
+        return {"ok": True}
+    history_dir = PROJECT_DIR / "history"
+    if req.action == "keep_forever":
+        history_dir.mkdir(exist_ok=True)
+        (history_dir / "keepforever.md").write_text("", encoding="utf-8")
+    elif req.action == "delete":
+        if history_dir.is_dir():
+            cutoff = time.time() - HISTORY_RETENTION_DAYS * 86400
+            for f in history_dir.glob("*.md"):
+                if f.name != "keepforever.md" and f.stat().st_mtime < cutoff:
+                    f.unlink()
+    elif req.action != "skip":
+        raise HTTPException(400, f"Unknown action: {req.action!r}")
+    return {"ok": True}
 
 
 @app.post("/api/revise")
@@ -344,18 +490,20 @@ def main() -> None:
     """Launch the local server and open the workspace in a browser.
 
     Usage: ``mdpad [FILE.md]`` -- an optional Markdown file to open instead of
-    the bundled example.
+    the bundled example. Its parent directory becomes the open project.
     """
     import sys
     import threading
 
     import uvicorn
 
-    global _current_doc, _current_name
+    global PROJECT_DIR, _current_doc, _current_name
     paths = [a for a in sys.argv[1:] if not a.startswith("-")]
     if paths:
-        target = Path(paths[0])
+        target = Path(paths[0]).resolve()
         if target.is_file():
+            PROJECT_DIR = target.parent
+            (PROJECT_DIR / "history").mkdir(exist_ok=True)
             _current_doc = target.read_text(encoding="utf-8")
             _current_name = target.name
             n = summ.load(_summ_path(target.name))

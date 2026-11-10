@@ -368,6 +368,29 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, .outline li:f
   max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
+#project-open {
+  font-family: var(--font-ui); font-size: 12px;
+  padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--surface); color: var(--ink); cursor: pointer;
+  max-width: 150px;
+}
+#project-open:hover { border-color: var(--accent); }
+
+/* ---- history-retention modal ------------------------------------------ */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 40;
+  align-items: center; justify-content: center;
+  background: rgba(26, 29, 33, .35);
+}
+.modal-overlay:not([hidden]) { display: flex; }
+.modal {
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow);
+  padding: 18px 20px; max-width: 360px;
+}
+.modal p { margin: 0 0 14px; font-size: 13.5px; line-height: 1.5; }
+.modal-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+
 /* ---- mermaid diagrams --------------------------------------------------- */
 .preview .mermaid {
   overflow-x: auto; display: block; margin: 1em 0; text-align: center;

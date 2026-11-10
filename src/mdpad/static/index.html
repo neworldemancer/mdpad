@@ -15,6 +15,10 @@
     <div class="wordmark">mdpad<span class="spectrum-glyph" aria-hidden="true"></span></div>
     <div class="breadcrumb" id="breadcrumb">representation-dynamics</div>
     <div class="filebar">
+      <button class="ghost" id="new-project" title="Create a new project">New project</button>
+      <select id="project-open" aria-label="Open a project">
+        <option value="" disabled selected>Project…</option>
+      </select>
       <button class="ghost" id="new-file" title="Start a new document">New</button>
       <select id="file-open" aria-label="Open a document">
         <option value="" disabled selected>Open…</option>
@@ -120,6 +124,17 @@
 
   <div class="toast" id="toast" hidden></div>
   <div class="map-tip" id="map-tip" hidden></div>
+
+  <div class="modal-overlay" id="history-modal" hidden>
+    <div class="modal">
+      <p id="history-modal-text"></p>
+      <div class="modal-actions">
+        <button class="ghost" id="history-skip">Ask again next time</button>
+        <button class="ghost" id="history-keep">Keep forever</button>
+        <button class="reject" id="history-delete">Delete now</button>
+      </div>
+    </div>
+  </div>
 
   <script src="/static/vendor/markdown-it.min.js"></script>
   <script defer src="/static/vendor/katex/katex.min.js"></script>

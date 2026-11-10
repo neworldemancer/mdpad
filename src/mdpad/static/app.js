@@ -4,6 +4,8 @@
 
 const $ = (id) => document.getElementById(id);
 const md = window.markdownit({ html: false, linkify: true, typographer: true });
+// Bare relative filename, e.g. "other.md" -- mirrors the backend's _NAME_RE.
+const _NAME_RE = /^[\w.\-]+\.md$/;
 
 // Stamp each rendered block with its markdown source line range so the editor
 // selection and the preview can be kept in sync (block-level).
@@ -416,6 +418,108 @@ async function refreshFiles() {
   if (currentName) sel.value = currentName;
 }
 
+// ---- projects -------------------------------------------------------------
+async function refreshProjects() {
+  let data;
+  try {
+    data = await (await fetch("/api/projects")).json();
+  } catch (e) {
+    return toast("Could not list projects: " + e.message);
+  }
+  const sel = $("project-open");
+  sel.innerHTML = '<option value="" disabled selected>Project…</option>';
+  (data.projects || []).forEach((name) => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    sel.appendChild(opt);
+  });
+  if (data.current) sel.value = data.current;
+  return data;
+}
+
+async function openProject(name) {
+  let data;
+  try {
+    const res = await fetch("/api/projects/open", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    data = await res.json();
+    if (!res.ok) return toast("Open project failed: " + (data.detail || res.statusText));
+  } catch (e) {
+    return toast("Open project failed: " + e.message);
+  }
+  await afterProjectSwitch(data);
+  toast("Opened project " + name);
+}
+
+async function newProject() {
+  const name = prompt("New project name:");
+  if (!name) return;
+  let data;
+  try {
+    const res = await fetch("/api/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    data = await res.json();
+    if (!res.ok) return toast("Create project failed: " + (data.detail || res.statusText));
+  } catch (e) {
+    return toast("Create project failed: " + e.message);
+  }
+  await refreshProjects();
+  await afterProjectSwitch(data);
+  toast("Created project " + name);
+}
+
+// After opening/creating a project: load its first doc (if any) into the
+// editor and refresh every panel that depends on the current document.
+async function afterProjectSwitch(filesData) {
+  await refreshFiles();
+  const first = (filesData.files || [])[0] || null;
+  if (first) {
+    await openFile(first);
+  } else {
+    editor.value = "";
+    currentName = null;
+    dirty = false;
+    closeDock();
+    renderPreview(); buildOutline(); markActiveSection(); updateFilename();
+    refreshSummaryStatus(); refreshContextMap();
+  }
+  checkHistoryStatus();
+}
+
+// ---- history retention ---------------------------------------------------
+async function checkHistoryStatus() {
+  let data;
+  try {
+    data = await (await fetch("/api/history/status")).json();
+  } catch {
+    return; // best-effort
+  }
+  if (!data.total_bytes) return;
+  const mb = (data.total_bytes / (1024 * 1024)).toFixed(1);
+  $("history-modal-text").textContent = `History occupies ${mb} Mb. Delete snapshots older than 30 days?`;
+  $("history-modal").hidden = false;
+}
+
+async function historyCleanup(action) {
+  try {
+    await fetch("/api/history/cleanup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    });
+  } catch (e) {
+    toast("History cleanup failed: " + e.message);
+  }
+  $("history-modal").hidden = true;
+}
+
 async function openFile(name) {
   let data;
   try {
@@ -811,6 +915,14 @@ document.addEventListener("selectionchange", () => {
 });
 editor.addEventListener("mouseup", () => syncFromEditor(true));
 preview.addEventListener("click", (e) => {
+  // Doc-to-doc links: a bare "other.md" href resolves within the open project.
+  const a = e.target.closest("a[href]");
+  if (a && _NAME_RE.test(a.getAttribute("href"))) {
+    e.preventDefault();
+    if (dirty && !confirm("Discard unsaved changes?")) return;
+    openFile(a.getAttribute("href"));
+    return;
+  }
   const el = e.target.closest("[data-line-start]");
   if (el) selectSourceLines(el);
 });
@@ -831,6 +943,18 @@ $("file-open").addEventListener("change", (e) => {
 $("save").addEventListener("click", saveFile);
 $("new-file").addEventListener("click", newFile);
 $("regen-summaries").addEventListener("click", regenerateSummaries);
+$("new-project").addEventListener("click", newProject);
+$("project-open").addEventListener("change", (e) => {
+  const name = e.target.value;
+  if (dirty && !confirm("Discard unsaved changes?")) {
+    e.target.value = "";
+    return;
+  }
+  openProject(name);
+});
+$("history-skip").addEventListener("click", () => historyCleanup("skip"));
+$("history-keep").addEventListener("click", () => historyCleanup("keep_forever"));
+$("history-delete").addEventListener("click", () => historyCleanup("delete"));
 
 // ---- boot ---------------------------------------------------------------
 (async function boot() {
@@ -846,11 +970,13 @@ $("regen-summaries").addEventListener("click", regenerateSummaries);
   dirty = false;
   updateFilename();
   initResizers();
+  await refreshProjects();
   await refreshFiles();
   await initProvider();
   renderPreview(); buildOutline(); markActiveSection();
   refreshSummaryStatus();
   refreshUsage();
+  checkHistoryStatus();
   setSidebar(sidebarOpen);
   setMap(mapOpen);
   setInterval(autosaveTick, 30000);
