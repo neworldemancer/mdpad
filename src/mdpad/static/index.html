@@ -75,7 +75,10 @@
         <input id="custom-instr" type="text" autocomplete="off"
                placeholder="Custom instruction — Enter to run, Esc to cancel" />
       </div>
-      <textarea id="editor" spellcheck="false" aria-label="Markdown source"></textarea>
+      <div class="editor-wrap">
+        <div class="editor-hl" id="editor-hl" aria-hidden="true"></div>
+        <textarea id="editor" spellcheck="false" aria-label="Markdown source"></textarea>
+      </div>
     </section>
 
     <div class="gutter" data-resize="editor" role="separator" aria-orientation="vertical" title="Drag to resize"></div>

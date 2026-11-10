@@ -225,12 +225,29 @@ body {
   background: var(--paper); color: var(--ink); outline: none;
 }
 
-#editor {
-  flex: 1; resize: none; border: 0; outline: 0;
-  padding: 20px 22px;
+.editor-wrap { position: relative; flex: 1; min-height: 0; }
+.editor-wrap > #editor, .editor-wrap > .editor-hl {
+  position: absolute; inset: 0; margin: 0; border: 0;
+  padding: 20px 22px; box-sizing: border-box;
   font-family: var(--font-mono); font-size: 13.5px; line-height: 1.7;
-  color: var(--ink); background: var(--surface);
   tab-size: 2;
+}
+#editor {
+  resize: none; outline: 0; z-index: 1;
+  color: var(--ink); background: transparent;
+}
+/* Mirrors the textarea's text so a selection can stay highlighted (via <mark>)
+   even once the textarea loses focus and its native selection fades — the
+   textarea is transparent and sits on top, this div supplies the background. */
+.editor-hl {
+  z-index: 0; color: transparent; background: var(--surface);
+  white-space: pre-wrap; word-wrap: break-word; overflow: auto;
+  pointer-events: none; scrollbar-width: none;
+}
+.editor-hl::-webkit-scrollbar { display: none; }
+.editor-hl mark {
+  background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent);
+  border-radius: 2px; color: transparent;
 }
 
 .preview {

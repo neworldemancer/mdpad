@@ -157,6 +157,19 @@ function syncFromEditor(scroll) {
   if (first && scroll) first.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
+// Keep a selection visibly highlighted in the editor even after it loses
+// focus (e.g. while typing a custom instruction, or reviewing a proposal) —
+// a plain textarea drops its native selection highlight on blur.
+function setEditorHighlight(start, end) {
+  const hl = $("editor-hl");
+  const text = editor.value;
+  hl.innerHTML = escapeHtml(text.slice(0, start)) + "<mark>" +
+    escapeHtml(text.slice(start, end)) + "</mark>" + escapeHtml(text.slice(end));
+  hl.scrollTop = editor.scrollTop;
+  hl.scrollLeft = editor.scrollLeft;
+}
+function clearEditorHighlight() { $("editor-hl").innerHTML = ""; }
+
 // Click a preview block -> select its source lines in the editor.
 function selectSourceLines(el) {
   const s = +el.getAttribute("data-line-start"), e = +el.getAttribute("data-line-end");
@@ -326,6 +339,7 @@ async function ensureSummaries() {
 async function runAction(instruction) {
   const start = editor.selectionStart, end = editor.selectionEnd;
   if (start === end) return toast("Select some text first.");
+  setEditorHighlight(start, end);
   await ensureSummaries();
   toast("Building context…");
   let data;
@@ -393,7 +407,7 @@ function accept() {
   toast("Edit applied.");
 }
 
-function closeDock() { $("dock").hidden = true; pending = null; }
+function closeDock() { $("dock").hidden = true; pending = null; clearEditorHighlight(); }
 
 // ---- file open/save ------------------------------------------------------
 function updateFilename() {
@@ -874,6 +888,7 @@ document.querySelectorAll(".act").forEach((btn) =>
 );
 function openCustom() {
   if (editor.selectionStart === editor.selectionEnd) return toast("Select some text first.");
+  setEditorHighlight(editor.selectionStart, editor.selectionEnd);
   $("custom-bar").hidden = false;
   const input = $("custom-instr");
   input.value = "";
@@ -884,10 +899,11 @@ $("custom-instr").addEventListener("keydown", (e) => {
     e.preventDefault();
     const v = $("custom-instr").value.trim();
     $("custom-bar").hidden = true;
-    if (v) runAction(v);
+    if (v) runAction(v); else clearEditorHighlight();
   } else if (e.key === "Escape") {
     e.preventDefault();
     $("custom-bar").hidden = true;
+    clearEditorHighlight();
     editor.focus();
   }
 });
@@ -914,6 +930,10 @@ document.addEventListener("selectionchange", () => {
   if (document.activeElement === editor) { syncFromEditor(false); scheduleMap(); }
 });
 editor.addEventListener("mouseup", () => syncFromEditor(true));
+editor.addEventListener("scroll", () => {
+  $("editor-hl").scrollTop = editor.scrollTop;
+  $("editor-hl").scrollLeft = editor.scrollLeft;
+});
 preview.addEventListener("click", (e) => {
   // Doc-to-doc links: a bare "other.md" href resolves within the open project.
   const a = e.target.closest("a[href]");
