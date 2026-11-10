@@ -1,12 +1,17 @@
 # mdpad
 
+[![CI](https://github.com/neworldemancer/mdpad/actions/workflows/ci.yml/badge.svg)](https://github.com/neworldemancer/mdpad/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/mdpad.svg)](https://pypi.org/project/mdpad/)
+[![Python](https://img.shields.io/badge/python-3.14%2B-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-Apache--2.0-informational.svg)](LICENSE)
+
 A local-first, AI-assisted environment for writing and revising long
 technical/scientific documents (Markdown + LaTeX math). Its defining idea: the
 model is sent a compact, **inspectable context package** for the selected text —
 never the whole manuscript — and it never replaces your text silently (every
 edit is a diff you Accept or Reject).
 
-This is a **proof of concept** (see `tasks/01_poc.md`), not production software.
+This is a **proof of concept** (see `tasks/done/01_poc.md`), not production software.
 
 ## Run
 
@@ -30,9 +35,8 @@ uv run mdpad-configure --base-url https://host/v1 --api-key sk-...
 # or run with no flags to be prompted instead
 ```
 
-> Note: the preview libraries (markdown-it, KaTeX) currently load from a CDN, so
-> the preview needs internet access. Vendoring them for fully-offline use is a
-> planned hardening step.
+The preview libraries (markdown-it, KaTeX, Mermaid) are vendored locally, so
+the editor/preview works fully offline once the page has loaded.
 
 ## Use
 
@@ -44,9 +48,16 @@ uv run mdpad-configure --base-url https://host/v1 --api-key sk-...
 ## Develop
 
 ```powershell
-uv run pytest        # tests (section parsing + context package)
-install.bat          # editable install into the active/local venv
+uv sync --group dev    # install dev tools (pytest, ruff, mypy)
+uv run pytest           # tests (section parsing + context package)
+uv run ruff check .     # lint
+uv run ruff format .    # format
+uv run mypy src/mdpad   # type check
+install.bat             # editable install into the active/local venv
 ```
+
+CI (`.github/workflows/ci.yml`) runs all of the above on every push/PR.
+Pushing a tag matching `vX.Y[.Z]` publishes to PyPI (`.github/workflows/publish.yml`).
 
 Layout: Python backend in `src/mdpad/` (`app.py`, `sections.py`, `context.py`,
 `provider.py`); zero-build frontend in `src/mdpad/static/` — vanilla HTML/CSS/JS,

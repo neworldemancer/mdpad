@@ -3,16 +3,32 @@ name = "mdpad"
 version = "0.1.0"
 description = "Context-aware scientific writing environment (PoC)"
 readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 authors = [
     { name = "neworldemancer", email = "neworldemancer@gmail.com" }
 ]
 requires-python = ">=3.14"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Environment :: Web Environment",
+    "Framework :: FastAPI",
+    "Programming Language :: Python :: 3",
+    "Topic :: Text Editors",
+    "Topic :: Text Processing :: Markup :: Markdown",
+]
 dependencies = [
     "fastapi>=0.140.13",
     "httpx>=0.28.1",
     "python-dotenv>=1.2.2",
     "uvicorn[standard]>=0.51.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/neworldemancer/mdpad"
+Repository = "https://github.com/neworldemancer/mdpad"
+Issues = "https://github.com/neworldemancer/mdpad/issues"
 
 [project.scripts]
 mdpad = "mdpad:main"
