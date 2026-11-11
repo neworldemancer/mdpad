@@ -23,6 +23,9 @@ uv run mdpad
 
 Or double-click `mdpad.bat` (Windows) / run `./mdpad.sh` (macOS/Linux).
 
+Don't want to clone the repo at all? Once published, `uvx mdpad` runs it
+straight from PyPI, no install step.
+
 This starts a local server and opens `http://127.0.0.1:8000`. It works
 immediately with an **offline mock** (no API key needed) so you can try the full
 select → context → diff → accept flow. For real edits, open **Settings** and
