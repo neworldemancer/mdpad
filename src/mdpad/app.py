@@ -574,11 +574,22 @@ def main() -> None:
     mdpad runs as a tray icon with "Open mdpad" / "Quit", and the server runs
     in a background thread. Otherwise (headless/CI/SSH) it falls back to the
     previous behavior: block in the foreground, open one browser tab.
+
+    ``mdpad --configure [--base-url ...] [--api-key ...]`` writes the
+    server-side provider's ``.env`` instead of launching anything -- the
+    same thing ``mdpad-configure`` does, folded into the one entry point so
+    e.g. ``uvx mdpad --configure`` needs no second ``uvx`` invocation.
     """
     import sys
     import threading
 
     import uvicorn
+
+    if "--configure" in sys.argv[1:]:
+        from .configure import main as configure_main
+
+        configure_main([a for a in sys.argv[1:] if a != "--configure"])
+        return
 
     global PROJECT_DIR, _current_doc, _current_name
     paths = [a for a in sys.argv[1:] if not a.startswith("-")]

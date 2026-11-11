@@ -23,8 +23,12 @@ uv run mdpad
 
 Or double-click `mdpad.bat` (Windows) / run `./mdpad.sh` (macOS/Linux).
 
-Don't want to clone the repo at all? Once published, `uvx mdpad` runs it
-straight from PyPI, no install step.
+Don't want to clone the repo at all? `uvx mdpad` runs it straight from PyPI,
+no install step:
+
+```powershell
+uvx mdpad
+```
 
 This starts a local server and opens `http://127.0.0.1:8000`. It works
 immediately with an **offline mock** (no API key needed) so you can try the full
@@ -33,11 +37,22 @@ enter an OpenAI-compatible endpoint (OpenAI, OpenRouter, LM Studio, Ollama, …)
 base URL, API key, and model. Settings are stored in your browser only.
 
 To set a server-side default instead (so the key never has to be typed into
-the browser, or lives in source/git), write it to a local `.env`:
+the browser, or lives in source/git), write it to a local `.env` — the same
+`mdpad` command handles this with `--configure`, so no second tool/invocation
+is needed even with `uvx`:
 
 ```powershell
-uv run mdpad-configure --base-url https://host/v1 --api-key sk-...
-# or run with no flags to be prompted instead
+uvx mdpad --configure --base-url https://host/v1 --api-key sk-...
+# or with no flags, to be prompted instead
+```
+
+Then every regular run picks that `.env` up — with a cloned repo, `uv run mdpad`
+already does (python-dotenv finds it in the working directory); running via
+`uvx` instead, hand it to uv explicitly so it's loaded regardless of the
+current directory's own project state:
+
+```powershell
+uv run --env-file .env --no-project --with mdpad mdpad
 ```
 
 The preview libraries (markdown-it, KaTeX, Mermaid) are vendored locally, so

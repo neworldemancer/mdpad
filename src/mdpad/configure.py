@@ -6,6 +6,10 @@ Usage::
 
     uv run mdpad-configure --base-url https://host/v1 --api-key sk-...
     uv run mdpad-configure            # prompts interactively instead
+
+Also reachable as ``mdpad --configure ...`` (see ``app.main``) -- the same
+thing, folded into the one entry point so e.g. ``uvx mdpad --configure``
+needs no second ``uvx`` invocation.
 """
 
 from __future__ import annotations
@@ -43,12 +47,14 @@ def _write_env(path: Path, env: dict[str, str]) -> None:
         raise
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    """``argv`` defaults to ``sys.argv[1:]``; pass it explicitly when calling
+    this from another entry point (e.g. ``mdpad --configure ...``)."""
     parser = argparse.ArgumentParser(description="Configure mdpad's server-side LLM provider (.env).")
     parser.add_argument("--base-url", help="OpenAI-compatible base URL, e.g. https://host/v1")
     parser.add_argument("--api-key", help="API key for that endpoint")
     parser.add_argument("--env-file", default=".env", help="Path to the .env file to write (default: ./.env)")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     path = Path(args.env_file)
     env = _read_env(path)
