@@ -203,6 +203,19 @@ def test_refresh_without_configured_provider_is_graceful(monkeypatch):
     assert st["missing"] == len(secs) + len(blocks)
 
 
+def test_refresh_treats_a_local_endpoint_without_a_key_as_configured(monkeypatch):
+    """Regression test: _configured() used to require a truthy api_key,
+    silently skipping summarization for a no-auth local provider like Ollama."""
+    monkeypatch.setattr(summaries.prov, "chat_text", lambda **kwargs: "Stub summary.")
+    secs = parse_sections(DOC)
+    blocks = parse_blocks(DOC)
+    local_provider = {"base_url": "http://localhost:11434/v1", "api_key": "", "model": "llama3"}
+    result = summaries.refresh(secs, blocks, DOC, local_provider, "all")
+
+    assert result["error"] is None
+    assert result["generated"] == len(secs) + len(blocks) + 1
+
+
 def test_refresh_unknown_mode_reports_error(monkeypatch):
     monkeypatch.setattr(summaries.prov, "chat_text", _stub_chat_text())
     secs = parse_sections(DOC)
@@ -300,6 +313,31 @@ def test_refresh_invalidated_provider_error_is_captured(monkeypatch):
     monkeypatch.setattr(summaries.prov, "chat_text", _raise)
     result = summaries.refresh(new_secs, new_blocks, new_doc, PROVIDER, "invalidated")
     assert result["error"] == "boom"
+
+
+def test_progress_tracks_done_and_total_then_goes_idle(monkeypatch):
+    monkeypatch.setattr(summaries.prov, "chat_text", _stub_chat_text())
+    secs = parse_sections(DOC)
+    blocks = parse_blocks(DOC)
+    assert summaries.get_progress() == {"active": False, "done": 0, "total": 0}
+
+    summaries.refresh(secs, blocks, DOC, PROVIDER, "all")
+
+    progress = summaries.get_progress()
+    assert progress["active"] is False
+    assert progress["total"] == len(secs) + len(blocks) + 1
+    assert progress["done"] == progress["total"]
+
+
+def test_progress_goes_idle_even_on_provider_error(monkeypatch):
+    def _raise(**kwargs):
+        raise ProviderError("boom")
+
+    monkeypatch.setattr(summaries.prov, "chat_text", _raise)
+    secs = parse_sections(DOC)
+    blocks = parse_blocks(DOC)
+    summaries.refresh(secs, blocks, DOC, PROVIDER, "all")
+    assert summaries.get_progress()["active"] is False
 
 
 def test_validity_states():

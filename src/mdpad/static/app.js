@@ -27,6 +27,10 @@ const preview = $("preview");
 let pending = null; // { start, end } of the selection a proposal applies to
 let currentName = null; // filename of the open document, or null (unsaved example)
 let dirty = false; // true when the editor has unsaved changes
+// Bumped whenever the dock is closed (or a new action starts); an in-flight
+// runAction() discards its response if this no longer matches the token it
+// captured, so closing the dock during a slow request actually sticks.
+let requestToken = 0;
 
 const ACTIONS = {
   rewrite: "Rewrite the selected text more clearly while preserving meaning and all math.",
@@ -270,10 +274,16 @@ function saveSettings() {
   localStorage.setItem("mdpad.provider", JSON.stringify(readSettings()));
   refreshProviderDot();
 }
+const _LOCAL_HOSTS = ["localhost", "127.0.0.1", "[::1]"];
+function isLocalBaseUrl(url) {
+  try { return _LOCAL_HOSTS.includes(new URL(url).hostname); } catch { return false; }
+}
 function refreshProviderDot() {
   const s = readSettings();
-  // "live" when a model is chosen and a key exists (server .env or user-supplied)
-  $("provider-dot").classList.toggle("live", !!(s.model && (serverHasKey || s.api_key)));
+  // "live" when a model is chosen and a key exists (server .env, user-supplied,
+  // or none needed because the endpoint is local, e.g. Ollama)
+  const hasKey = serverHasKey || s.api_key || isLocalBaseUrl(s.base_url);
+  $("provider-dot").classList.toggle("live", !!(s.model && hasKey));
 }
 
 // Fetch the model list from the backend (which uses the server .env key by
@@ -321,26 +331,45 @@ async function initProvider() {
 }
 
 // ---- revise flow --------------------------------------------------------
+// Poll /api/summaries/progress while a refresh is in flight, so a multi-item
+// batch (several sequential LLM calls server-side) isn't silent the whole
+// time -- without this it looks frozen at "0/N" until it suddenly finishes.
+let progressTimer = null;
+function startProgressPoll() {
+  clearInterval(progressTimer);
+  progressTimer = setInterval(async () => {
+    try {
+      const p = await (await fetch("/api/summaries/progress")).json();
+      if (p.active) toastSticky(`Generating summaries… ${p.done}/${p.total}`);
+    } catch { /* ignore -- just a progress poll */ }
+  }, 400);
+}
+function stopProgressPoll() { clearInterval(progressTimer); progressTimer = null; }
+
 // Auto-generate any summaries the document is missing (whole doc + all levels)
 // so a revise builds on real summaries, not excerpt fallbacks. Only the missing
 // ones are generated, so it is a one-time cost per new/changed section.
 async function ensureSummaries() {
   try {
-    toast("Generating summaries…");
+    toastSticky("Generating summaries…");
+    startProgressPoll();
     const res = await fetch("/api/summaries/refresh", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: editor.value, mode: "missing", provider: readSettings() }),
     });
     const data = await res.json();
     if (data.generated) { setUsage(data.usage); refreshSummaryStatus(); }
-  } catch { /* proceed anyway; the revise falls back to excerpts */ }
+  } catch { /* proceed anyway; the revise falls back to excerpts */
+  } finally { stopProgressPoll(); }
 }
 
 async function runAction(instruction) {
   const start = editor.selectionStart, end = editor.selectionEnd;
   if (start === end) return toast("Select some text first.");
+  const token = ++requestToken; // invalidated if the dock is closed, or another action starts, meanwhile
   setEditorHighlight(start, end);
   await ensureSummaries();
+  if (token !== requestToken) return;
   toast("Building context…");
   let data;
   try {
@@ -356,6 +385,7 @@ async function runAction(instruction) {
   } catch (e) {
     return toast("Request failed: " + e.message);
   }
+  if (token !== requestToken) return;
   pending = { start, end };
   showDock(data, editor.value.slice(start, end));
   setUsage(data.usage);
@@ -364,6 +394,7 @@ async function runAction(instruction) {
 
 function showDock(data, selected) {
   $("dock").hidden = false;
+  showDockTab("review");
   // context spectrum + legend
   const items = data.context.items;
   const max = Math.max(...items.map((i) => i.tokens), 1);
@@ -407,7 +438,63 @@ function accept() {
   toast("Edit applied.");
 }
 
-function closeDock() { $("dock").hidden = true; pending = null; clearEditorHighlight(); }
+function closeDock() { requestToken++; $("dock").hidden = true; pending = null; clearEditorHighlight(); }
+
+// ---- dock tabs + backend logs -------------------------------------------
+function showDockTab(name) {
+  ["review", "logs"].forEach((t) => {
+    $("dock-tab-" + t).classList.toggle("active", t === name);
+    $("dock-tab-" + t).setAttribute("aria-selected", String(t === name));
+    $("dock-pane-" + t).hidden = t !== name;
+  });
+  if (name === "logs") renderLogs();
+}
+
+let lastLogId = 0;
+let logEntries = [];
+
+function renderLogs() {
+  const list = $("logs-list");
+  if (!logEntries.length) {
+    list.innerHTML = '<li class="logs-empty">No backend events yet.</li>';
+    return;
+  }
+  list.innerHTML = logEntries
+    .map((e) => {
+      const time = new Date(e.ts * 1000).toLocaleTimeString();
+      return `<li><span class="log-dot ${e.level}" title="${e.level}"></span>` +
+        `<span class="log-time">${time}</span>` +
+        `<span class="log-source">${escapeHtml(e.source)}</span>` +
+        `<span class="log-message">${escapeHtml(e.message)}</span></li>`;
+    })
+    .join("");
+  list.scrollTop = list.scrollHeight;
+}
+
+function updateLogsBadge() {
+  const errors = logEntries.filter((e) => e.level === "error").length;
+  const badge = $("logs-badge");
+  badge.hidden = !errors;
+  badge.textContent = String(errors);
+}
+
+async function pollLogsOnce() {
+  try {
+    const data = await (await fetch("/api/logs?since=" + lastLogId)).json();
+    if (data.logs.length) {
+      logEntries = logEntries.concat(data.logs).slice(-200);
+      lastLogId = data.logs[data.logs.length - 1].id;
+      updateLogsBadge();
+      if (!$("dock").hidden && !$("dock-pane-logs").hidden) renderLogs();
+    }
+  } catch { /* ignore -- just a log poll */ }
+}
+// Polls continuously (not just while the Logs tab is open) so the error
+// badge in the topbar stays accurate even when the dock is closed.
+function startLogsPoll() {
+  pollLogsOnce();
+  setInterval(pollLogsOnce, 4000);
+}
 
 // ---- file open/save ------------------------------------------------------
 function updateFilename() {
@@ -650,7 +737,10 @@ async function regenerateSummaries() {
   }
   if (est.count === 0) return toast("Summaries already up to date.");
   if (!confirm("~" + est.est_tokens + " tokens for " + est.count + " summaries (missing + changed). Continue?")) return;
+  $("regen-summaries").disabled = true;
   try {
+    toastSticky(`Generating summaries… 0/${est.count}`);
+    startProgressPoll();
     const res = await fetch("/api/summaries/refresh", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -664,6 +754,9 @@ async function regenerateSummaries() {
     setUsage(data.usage);
   } catch (e) {
     return toast("Regenerate failed: " + e.message);
+  } finally {
+    stopProgressPoll();
+    $("regen-summaries").disabled = false;
   }
   refreshSummaryStatus();
 }
@@ -683,6 +776,12 @@ let toastTimer = null;
 function toast(msg) {
   const t = $("toast"); t.textContent = msg; t.hidden = false;
   clearTimeout(toastTimer); toastTimer = setTimeout(hideToast, 2600);
+}
+// Shows a message that stays until the next toast()/hideToast() -- for
+// progress updates that would otherwise flicker away mid-wait.
+function toastSticky(msg) {
+  const t = $("toast"); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer);
 }
 function hideToast() { $("toast").hidden = true; }
 
@@ -918,9 +1017,25 @@ $("settings-toggle").addEventListener("click", () => {
   $(id).addEventListener("change", () => { saveSettings(); fetchModels(); })
 );
 $("p-refresh").addEventListener("click", fetchModels);
+$("p-ollama").addEventListener("click", () => {
+  $("p-base").value = "http://localhost:11434/v1";
+  $("p-key").value = "";
+  fetchModels();
+});
 $("accept").addEventListener("click", accept);
 $("reject").addEventListener("click", closeDock);
 $("dock-close").addEventListener("click", closeDock);
+$("dock-tab-review").addEventListener("click", () => showDockTab("review"));
+$("dock-tab-logs").addEventListener("click", () => showDockTab("logs"));
+$("logs-toggle").addEventListener("click", () => {
+  $("dock").hidden = false;
+  showDockTab("logs");
+});
+$("logs-clear").addEventListener("click", async () => {
+  try { await fetch("/api/logs/clear", { method: "POST" }); } catch { /* ignore */ }
+  logEntries = []; lastLogId = 0;
+  updateLogsBadge(); renderLogs();
+});
 editor.addEventListener("input", () => { dirty = true; scheduleRender(); buildOutline(); markActiveSection(); scheduleMap(); });
 $("map-toggle").addEventListener("click", () => setMap(!mapOpen));
 editor.addEventListener("keyup", markActiveSection);
@@ -997,6 +1112,7 @@ $("history-delete").addEventListener("click", () => historyCleanup("delete"));
   refreshSummaryStatus();
   refreshUsage();
   checkHistoryStatus();
+  startLogsPoll();
   setSidebar(sidebarOpen);
   setMap(mapOpen);
   setInterval(autosaveTick, 30000);

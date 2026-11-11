@@ -15,6 +15,11 @@ import time
 import webbrowser
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import pystray
+    import uvicorn
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -22,6 +27,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from . import applog
 from . import context as ctx
 from . import provider as prov
 from . import summaries as summ
@@ -162,12 +168,14 @@ def _resolve_endpoint(base_url: str, api_key: str) -> tuple[str, str]:
     The server-side .env key is only ever paired with the server's own base URL.
     A caller-supplied custom base URL must bring its own key -- otherwise a
     forged request (e.g. ?base_url=http://attacker/) could exfiltrate the key.
+    Exception: a local endpoint (e.g. Ollama/LM Studio on localhost) carries
+    no server secret either way, so it's fine with no key at all.
     """
     bu = (base_url or SERVER_BASE_URL).rstrip("/")
     if bu == SERVER_BASE_URL:
         return bu, (api_key or SERVER_API_KEY)
-    if not api_key:
-        raise ValueError("A custom base URL requires its own API key.")
+    if not api_key and not prov.is_local(bu):
+        raise ValueError("A custom (non-local) base URL requires its own API key.")
     return bu, api_key
 
 
@@ -201,6 +209,19 @@ def usage() -> dict:
     return prov.usage_totals()
 
 
+@app.get("/api/logs")
+def get_logs(since: int = 0) -> dict:
+    """Backend events (provider errors, mock-fallback notices, summary-refresh
+    results) newer than ``since`` -- polled by the dock's Logs tab."""
+    return {"logs": applog.get_logs(since)}
+
+
+@app.post("/api/logs/clear")
+def clear_logs() -> dict:
+    applog.clear()
+    return {"ok": True}
+
+
 @app.get("/api/models")
 def list_models_endpoint(base_url: str = "", api_key: str = "") -> dict:
     """Fetch the OpenAI-compatible model list. Blank args use the server defaults."""
@@ -210,6 +231,7 @@ def list_models_endpoint(base_url: str = "", api_key: str = "") -> dict:
         models = _chat_models(prov.list_models(base_url=bu, api_key=ak))
         return {"models": models, "base_url": bu, "has_key": bool(ak), "error": None}
     except (ValueError, prov.ProviderError) as e:
+        applog.log("error", "models", str(e))
         return {"models": [], "base_url": bu, "has_key": bool(api_key), "error": str(e)}
 
 
@@ -374,6 +396,9 @@ def revise(req: ReviseRequest) -> dict:
         )
     except (ValueError, prov.ProviderError) as e:
         error = str(e)
+        applog.log("error", "revise", error)
+    if proposal is not None and proposal.mock:
+        applog.log("info", "revise", "No provider configured -- returned the offline mock.")
     return {
         "section": owner_section.title if owner_section else None,
         "context": package.as_dict(),
@@ -405,6 +430,13 @@ def summaries_estimate(req: SummariesEstimateRequest) -> dict:
     sections = parse_sections(req.text)
     blocks = parse_blocks(req.text)
     return summ.estimate(sections, blocks, req.mode)
+
+
+@app.get("/api/summaries/progress")
+def summaries_progress() -> dict:
+    """Live done/total for whichever summaries/refresh call is in flight (if
+    any) -- polled by the frontend so a multi-item batch isn't silent."""
+    return summ.get_progress()
 
 
 @app.post("/api/summaries")
@@ -490,11 +522,58 @@ def _open_when_ready(url: str) -> None:
         pass
 
 
+def _tray_image():
+    """A small rounded-square icon mirroring static/favicon.svg's spectrum-bar
+    motif (teal bars on graphite), drawn with Pillow -- no asset file needed."""
+    from PIL import Image, ImageDraw
+
+    size = 64
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    draw.rounded_rectangle([0, 0, size - 1, size - 1], radius=14, fill=(26, 29, 33, 255))
+    bars = [(12, 36, 6, 16), (22, 14, 6, 38), (32, 28, 6, 24), (42, 10, 6, 42), (52, 38, 6, 14)]
+    for x, y, w, h in bars:
+        draw.rounded_rectangle([x, y, x + w, y + h], radius=2, fill=(47, 111, 107, 255))
+    return img
+
+
+def _build_tray_icon(url: str, server: uvicorn.Server) -> pystray.Icon | None:
+    """A pystray.Icon with Open/Quit, or None if no tray backend is available
+    (headless CI, SSH session, missing OS integration, etc.) -- callers must
+    fall back to the plain blocking server in that case."""
+    try:
+        import pystray
+    except ImportError:
+        return None
+
+    def _open(icon=None, item=None) -> None:
+        webbrowser.open(url)
+
+    def _quit(icon, item) -> None:
+        server.should_exit = True
+        icon.stop()
+
+    return pystray.Icon(
+        "mdpad",
+        _tray_image(),
+        "mdpad",
+        menu=pystray.Menu(
+            pystray.MenuItem("Open mdpad", _open, default=True),
+            pystray.MenuItem("Quit", _quit),
+        ),
+    )
+
+
 def main() -> None:
     """Launch the local server and open the workspace in a browser.
 
     Usage: ``mdpad [FILE.md]`` -- an optional Markdown file to open instead of
     the bundled example. Its parent directory becomes the open project.
+
+    Where a tray backend is available (Windows/macOS/most Linux desktops),
+    mdpad runs as a tray icon with "Open mdpad" / "Quit", and the server runs
+    in a background thread. Otherwise (headless/CI/SSH) it falls back to the
+    previous behavior: block in the foreground, open one browser tab.
     """
     import sys
     import threading
@@ -521,5 +600,20 @@ def main() -> None:
     if port != DEFAULT_PORT:
         print(f"mdpad: port {DEFAULT_PORT} busy, using {port}")
     print(f"mdpad: serving on {url}")
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="info")
+    server = uvicorn.Server(config)
+    icon = _build_tray_icon(url, server)
     threading.Thread(target=_open_when_ready, args=(url,), daemon=True).start()
-    uvicorn.run(app, host=host, port=port, log_level="info")
+
+    if icon is None:
+        server.run()
+        return
+
+    server_thread = threading.Thread(target=server.run, daemon=True)
+    server_thread.start()
+    try:
+        icon.run()  # blocks on the main thread (required on macOS) until Quit
+    except Exception as e:
+        print(f"mdpad: tray icon unavailable ({e}); running without it. Ctrl+C to stop.")
+        server_thread.join()

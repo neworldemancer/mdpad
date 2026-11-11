@@ -29,6 +29,7 @@
     </div>
     <span class="usage" id="usage" title="session token usage"></span>
     <button class="ghost" id="map-toggle" title="Toggle the summary-context panel">Context</button>
+    <button class="ghost" id="logs-toggle" title="Backend logs (provider errors, notices)">Logs<span class="badge" id="logs-badge" hidden></span></button>
     <div class="provider-status">
       <span class="dot" id="provider-dot" aria-hidden="true"></span>
       <button class="ghost" id="settings-toggle">Settings</button>
@@ -50,13 +51,17 @@
         <label>Base URL<input id="p-base" placeholder="https://api.openai.com/v1" /></label>
         <label>API key<input id="p-key" type="password" placeholder="using server .env key" /></label>
         <label>Model<select id="p-model"></select></label>
-        <button type="button" class="ghost" id="p-refresh">↻ Refresh models</button>
+        <div class="settings-row">
+          <button type="button" class="ghost" id="p-refresh">↻ Refresh models</button>
+          <button type="button" class="ghost" id="p-ollama">Use local Ollama</button>
+        </div>
         <div class="settings-row">
           <label>Temp<input id="p-temp" type="number" step="0.1" min="0" max="2" value="0.3" /></label>
           <label>Max tokens<input id="p-max" type="number" min="1" value="1024" /></label>
         </div>
         <p class="hint">Base URL &amp; models load from the server; the API key comes from
-          <code>.env</code> — leave the key blank to use it. Blank base URL + key → offline mock.</p>
+          <code>.env</code> — leave the key blank to use it. Blank base URL + key → offline mock.
+          A local endpoint (e.g. Ollama) needs no key.</p>
       </form>
     </nav>
 
@@ -97,31 +102,43 @@
   <footer class="dock" id="dock" hidden>
     <div class="dock-resize" role="separator" aria-orientation="horizontal" title="Drag to resize"></div>
     <div class="dock-head">
-      <span class="panel-label" id="dock-title">Context &amp; review</span>
+      <div class="dock-tabs" role="tablist">
+        <button class="dock-tab active" id="dock-tab-review" data-tab="review" role="tab" aria-selected="true">Context &amp; review</button>
+        <button class="dock-tab" id="dock-tab-logs" data-tab="logs" role="tab" aria-selected="false">Logs</button>
+      </div>
       <button class="ghost" id="dock-close">Close</button>
     </div>
     <div class="dock-body">
-      <div class="context-block">
-        <div class="context-head">
-          <span class="panel-label">Context sent to model</span>
-          <span class="total" id="ctx-total"></span>
+      <div class="dock-pane" id="dock-pane-review">
+        <div class="context-block">
+          <div class="context-head">
+            <span class="panel-label">Context sent to model</span>
+            <span class="total" id="ctx-total"></span>
+          </div>
+          <div class="spectrum" id="ctx-spectrum" aria-hidden="true"></div>
+          <ul class="ctx-legend" id="ctx-legend"></ul>
         </div>
-        <div class="spectrum" id="ctx-spectrum" aria-hidden="true"></div>
-        <ul class="ctx-legend" id="ctx-legend"></ul>
+        <div class="review-block" id="review-block">
+          <div class="status-line" id="status-line"></div>
+          <label class="prompt-label">Full prompt sent
+            <textarea id="prompt-full" readonly></textarea>
+          </label>
+          <div class="diff">
+            <div class="diff-col"><span class="diff-label">Selected</span><pre id="diff-original"></pre></div>
+            <div class="diff-col"><span class="diff-label proposed">Proposed</span><pre id="diff-proposed"></pre></div>
+          </div>
+          <div class="decision">
+            <button class="accept" id="accept">Accept</button>
+            <button class="reject" id="reject">Reject</button>
+          </div>
+        </div>
       </div>
-      <div class="review-block" id="review-block">
-        <div class="status-line" id="status-line"></div>
-        <label class="prompt-label">Full prompt sent
-          <textarea id="prompt-full" readonly></textarea>
-        </label>
-        <div class="diff">
-          <div class="diff-col"><span class="diff-label">Selected</span><pre id="diff-original"></pre></div>
-          <div class="diff-col"><span class="diff-label proposed">Proposed</span><pre id="diff-proposed"></pre></div>
+      <div class="dock-pane" id="dock-pane-logs" hidden>
+        <div class="logs-toolbar">
+          <span class="panel-label">Backend logs</span>
+          <button class="ghost" id="logs-clear">Clear</button>
         </div>
-        <div class="decision">
-          <button class="accept" id="accept">Accept</button>
-          <button class="reject" id="reject">Reject</button>
-        </div>
+        <ul class="logs-list" id="logs-list"></ul>
       </div>
     </div>
   </footer>

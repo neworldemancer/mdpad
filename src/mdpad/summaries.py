@@ -24,6 +24,7 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from . import applog
 from . import provider as prov
 from .sections import Block, Section, ancestors
 
@@ -91,6 +92,14 @@ class Summary:
 
 _STORE: dict[str, Summary] = {}
 
+# Live progress for the in-flight refresh() call, if any -- polled by the
+# frontend so a multi-item batch isn't silent for its whole duration.
+_PROGRESS: dict[str, int | bool] = {"active": False, "done": 0, "total": 0}
+
+
+def get_progress() -> dict:
+    return dict(_PROGRESS)
+
 
 def get(section_id: str) -> Summary | None:
     return _STORE.get(section_id)
@@ -102,6 +111,7 @@ def put(summary: Summary) -> None:
 
 def reset() -> None:
     _STORE.clear()
+    _PROGRESS.update(active=False, done=0, total=0)
 
 
 def _est_tokens(text: str) -> int:
@@ -166,11 +176,9 @@ def summary_changed(old_summary: str, diff: str, provider: dict) -> bool:
 
 
 def _configured(provider: dict) -> bool:
-    return bool(
-        (provider.get("base_url") or "").strip()
-        and (provider.get("api_key") or "").strip()
-        and (provider.get("model") or "").strip()
-    )
+    base_url = (provider.get("base_url") or "").strip()
+    has_key = bool((provider.get("api_key") or "").strip()) or prov.is_local(base_url)
+    return bool(base_url and has_key and (provider.get("model") or "").strip())
 
 
 def refresh(sections: list[Section], blocks: list[Block], whole_text: str, provider: dict, mode: str) -> dict:
@@ -220,6 +228,8 @@ def refresh(sections: list[Section], blocks: list[Block], whole_text: str, provi
             "error": "Provider not configured; skipped summarization.",
         }
 
+    total = len(_STORE) if mode == "invalidated" else len(sections) + len(blocks) + 1
+    _PROGRESS.update(active=True, done=0, total=total)
     try:
         if mode in ("all", "missing", "sync"):
 
@@ -240,24 +250,27 @@ def refresh(sections: list[Section], blocks: list[Block], whole_text: str, provi
                 generated += 1
             else:
                 skipped += 1
+            _PROGRESS["done"] += 1
 
             for s in sorted(sections, key=lambda s: (s.level, s.start_line)):
                 if not _needs(s.id, s.text):
                     skipped += 1
-                    continue
-                parents = _parents_for_section(sections, s)
-                tokens += _est_tokens(s.text)
-                put(Summary(s.id, s.title, summarize(s.text, parents, provider), s.text, now))
-                generated += 1
+                else:
+                    parents = _parents_for_section(sections, s)
+                    tokens += _est_tokens(s.text)
+                    put(Summary(s.id, s.title, summarize(s.text, parents, provider), s.text, now))
+                    generated += 1
+                _PROGRESS["done"] += 1
 
             for b in blocks:
                 if not _needs(b.id, b.text):
                     skipped += 1
-                    continue
-                parents = _parents_for_block(sections, b)
-                tokens += _est_tokens(b.text)
-                put(Summary(b.id, b.id, summarize(b.text, parents, provider), b.text, now))
-                generated += 1
+                else:
+                    parents = _parents_for_block(sections, b)
+                    tokens += _est_tokens(b.text)
+                    put(Summary(b.id, b.id, summarize(b.text, parents, provider), b.text, now))
+                    generated += 1
+                _PROGRESS["done"] += 1
         else:  # "invalidated"
             by_sec = {s.id: s for s in sections}
             by_block = {b.id: b for b in blocks}
@@ -273,10 +286,12 @@ def refresh(sections: list[Section], blocks: list[Block], whole_text: str, provi
                 if current_text is None:
                     # No longer exists in the document -- nothing to check.
                     skipped += 1
+                    _PROGRESS["done"] += 1
                     continue
                 stale = current_text != summ.source_text and (now - summ.generated_at) > STALE_AFTER_S
                 if not stale:
                     skipped += 1
+                    _PROGRESS["done"] += 1
                     continue
                 diff = diff_text(summ.source_text, current_text)
                 tokens += _est_tokens(summ.summary) + _est_tokens(diff)
@@ -294,9 +309,15 @@ def refresh(sections: list[Section], blocks: list[Block], whole_text: str, provi
                 else:
                     put(Summary(sid, summ.title, summ.summary, current_text, now))
                     checked += 1
+                _PROGRESS["done"] += 1
     except prov.ProviderError as e:
         error = str(e)
+        applog.log("error", "summaries", error)
+    finally:
+        _PROGRESS["active"] = False
 
+    if error is None and (generated or checked):
+        applog.log("info", "summaries", f"{mode}: {generated} generated, {checked} checked, {skipped} skipped")
     return {"generated": generated, "checked": checked, "skipped": skipped, "tokens": tokens, "error": error}
 
 

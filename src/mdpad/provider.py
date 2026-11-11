@@ -10,8 +10,21 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from urllib.parse import urlparse
 
 import httpx
+
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+
+def is_local(base_url: str) -> bool:
+    """True for a loopback endpoint (e.g. Ollama/LM Studio on localhost),
+    which typically needs no API key."""
+    try:
+        return urlparse(base_url).hostname in _LOCAL_HOSTS
+    except ValueError:
+        return False
+
 
 SYSTEM_PROMPT = (
     "You are a scientific writing assistant. Revise the SELECTED TEXT only, "
@@ -73,12 +86,15 @@ def _mock(selection: str, instruction: str) -> Proposal:
 def list_models(*, base_url: str, api_key: str, timeout: float = 15) -> list[str]:
     """Return sorted model ids from an OpenAI-compatible ``GET /models`` endpoint."""
     base_url = (base_url or "").rstrip("/")
-    if not (base_url and api_key):
-        raise ProviderError("Base URL and API key are required to list models.")
+    if not base_url:
+        raise ProviderError("Base URL is required to list models.")
+    if not api_key and not is_local(base_url):
+        raise ProviderError("API key is required to list models from a non-local endpoint.")
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     try:
         resp = httpx.get(
             f"{base_url}/models",
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=headers,
             timeout=timeout,
         )
         resp.raise_for_status()
@@ -99,8 +115,10 @@ def _chat_completion(*, system: str, user: str, provider: dict) -> str:
     base_url = (provider.get("base_url") or "").rstrip("/")
     api_key = provider.get("api_key") or ""
     model = provider.get("model") or ""
-    if not (base_url and api_key and model):
-        raise ProviderError("Provider not configured: base_url, api_key and model are required.")
+    if not (base_url and model):
+        raise ProviderError("Provider not configured: base_url and model are required.")
+    if not api_key and not is_local(base_url):
+        raise ProviderError("Provider not configured: an API key is required for a non-local endpoint.")
 
     payload = {
         "model": model,
@@ -111,10 +129,11 @@ def _chat_completion(*, system: str, user: str, provider: dict) -> str:
             {"role": "user", "content": user},
         ],
     }
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     try:
         resp = httpx.post(
             f"{base_url}/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=headers,
             json=payload,
             timeout=float(provider.get("timeout", 60)),
         )
@@ -142,7 +161,7 @@ def revise(*, package_text: str, selection: str, instruction: str, provider: dic
     base_url = (provider.get("base_url") or "").rstrip("/")
     api_key = provider.get("api_key") or ""
     model = provider.get("model") or ""
-    if not (base_url and api_key and model):
+    if not (base_url and model) or (not api_key and not is_local(base_url)):
         return _mock(selection, instruction)
 
     content = _chat_completion(system=SYSTEM_PROMPT, user=package_text, provider=provider)
