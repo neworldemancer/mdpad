@@ -1,31 +1,46 @@
-# Representation Dynamics
+# Logistic Regression
 
-An informal, hypothesis-aware account of how learned representations move,
-concentrate, and reorganize as information is processed.
+A compact walkthrough of the model, its loss, and the computation pipeline
+that trains it.
 
-## Representation Geometry
+## Model
 
-A representation assigns to each input $x$ a vector $z = f_\theta(x) \in \mathbb{R}^d$.
-The geometry of the induced point cloud — its curvature, intrinsic dimension, and
-anisotropy — often carries more signal than any single coordinate.
+For an input $x \in \mathbb{R}^d$ with weights $w$ and bias $b$, logistic
+regression predicts
 
-We treat the empirical covariance $\Sigma = \mathbb{E}[(z-\mu)(z-\mu)^\top]$ as a
-first-order probe. Its eigenspectrum $\{\lambda_i\}$ separates directions the model
-actively uses from directions it merely tolerates.
+$$ p(y=1 \mid x) = \sigma(w^\top x + b) = \frac{1}{1 + e^{-(w^\top x + b)}} $$
 
-## Spectral Modes
+The sigmoid $\sigma$ maps the linear score $z = w^\top x + b$ onto $(0, 1)$,
+turning a raw score into a probability.
 
-Let $L$ be a graph Laplacian built on the representation. Its modes $\phi_k$ with
-eigenvalues $0 = \mu_0 \le \mu_1 \le \dots$ give a natural basis for slow, reusable
-structure. The claim — still a hypothesis — is that low modes encode geometry that
-transfers across tasks, while high modes encode dataset-specific occupancy.
+## Loss
 
-$$ L \phi_k = \mu_k \, \phi_k, \qquad k = 0, 1, 2, \dots $$
+Training minimizes the negative log-likelihood (binary cross-entropy) over
+$n$ labeled examples:
 
-## Mode Occupation
+$$ \mathcal{L}(w, b) = -\frac{1}{n} \sum_{i=1}^n \Big[ y_i \log p_i + (1 - y_i) \log(1 - p_i) \Big] $$
 
-Define the occupation of mode $k$ as
-$p_k = \langle a, \phi_k\rangle^2 \big/ \sum_j \langle a, \phi_j\rangle^2$,
-the fraction of activity a signal $a$ places on that mode. Occupation profiles may
-distinguish memorization from generalization, but this connection is presently
-proposed, not established.
+$\mathcal{L}$ is convex in $w$ and $b$, so gradient descent converges to the
+global minimum regardless of where it starts.
+
+## Gradient
+
+The gradient has a clean form because the sigmoid's derivative is
+$\sigma'(z) = \sigma(z)\,(1 - \sigma(z))$:
+
+$$ \nabla_w \mathcal{L} = \frac{1}{n} \sum_{i=1}^n (p_i - y_i)\, x_i $$
+
+Each example pushes the weights in proportion to its own prediction error
+$p_i - y_i$, scaled by its features.
+
+## Pipeline
+
+```mermaid
+flowchart LR
+    A[Raw features] --> B[Standardize]
+    B --> C[Linear score]
+    C --> D[Sigmoid]
+    D --> E{p >= 0.5?}
+    E -->|yes| F[Predict 1]
+    E -->|no| G[Predict 0]
+```

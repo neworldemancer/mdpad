@@ -46,9 +46,9 @@ _HERE = Path(__file__).parent
 _STATIC = _HERE / "static"
 _DEFAULT_DOC = (_HERE / "example" / "book.md").read_text(encoding="utf-8")
 _PROJECT_SUMMARY = (
-    "A vision/review manuscript on representation dynamics and the physics of "
-    "information processing. Audience: researchers in representation learning. "
-    "Tone: precise, hypothesis-aware, mathematically careful."
+    "A short technical walkthrough of logistic regression: the model, its loss, "
+    "the gradient, and the training pipeline. Audience: students and engineers "
+    "learning the math. Tone: concise, precise, example-driven."
 )
 
 # The manuscript served to the browser. Defaults to the bundled example; a file
