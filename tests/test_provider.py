@@ -67,3 +67,27 @@ def test_revise_falls_back_to_mock_without_a_key_for_a_remote_endpoint():
         provider={"base_url": "https://api.openai.com/v1", "api_key": "", "model": "gpt-4"},
     )
     assert proposal.mock is True
+
+
+def test_provider_settings_default_timeout_is_generous_for_local_inference():
+    """Regression test: local CPU inference (e.g. Ollama) can easily exceed
+    the old 60s default, making it effectively unusable."""
+    settings = mdpad_app.ProviderSettings()
+    assert settings.timeout == 120.0
+
+
+def test_chat_completion_passes_the_configured_timeout(monkeypatch):
+    captured = {}
+
+    def _fake_post(url, headers, json, timeout):
+        captured["timeout"] = timeout
+        raise prov.httpx.HTTPError("stop before a real network call")
+
+    monkeypatch.setattr(prov.httpx, "post", _fake_post)
+    with pytest.raises(prov.ProviderError):
+        prov._chat_completion(
+            system="s",
+            user="u",
+            provider={"base_url": "http://localhost:11434/v1", "model": "m", "timeout": 300},
+        )
+    assert captured["timeout"] == 300

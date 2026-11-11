@@ -38,16 +38,21 @@
 
   <main class="workspace">
     <nav class="sidebar" id="sidebar" aria-label="Document outline">
-      <div class="panel-label">Outline</div>
-      <ul class="outline" id="outline"></ul>
-
-      <div class="summary-controls">
-        <button class="ghost" id="regen-summaries">Regenerate summaries</button>
-        <span class="hint" id="summary-status"></span>
+      <div class="sidebar-tabs" role="tablist">
+        <button class="sidebar-tab active" id="sidebar-tab-outline" data-tab="outline" role="tab" aria-selected="true">Outline</button>
+        <button class="sidebar-tab" id="sidebar-tab-settings" data-tab="settings" role="tab" aria-selected="false">Settings</button>
       </div>
 
-      <form class="settings" id="settings" hidden>
-        <div class="panel-label">Provider</div>
+      <div class="sidebar-pane" id="sidebar-pane-outline">
+        <ul class="outline" id="outline"></ul>
+
+        <div class="summary-controls">
+          <button class="ghost" id="regen-summaries">Regenerate summaries</button>
+          <span class="hint" id="summary-status"></span>
+        </div>
+      </div>
+
+      <form class="settings sidebar-pane" id="sidebar-pane-settings" hidden>
         <label>Base URL<input id="p-base" placeholder="https://api.openai.com/v1" /></label>
         <label>API key<input id="p-key" type="password" placeholder="using server .env key" /></label>
         <label>Model<select id="p-model"></select></label>
@@ -59,9 +64,11 @@
           <label>Temp<input id="p-temp" type="number" step="0.1" min="0" max="2" value="0.3" /></label>
           <label>Max tokens<input id="p-max" type="number" min="1" value="1024" /></label>
         </div>
+        <label>Timeout (s)<input id="p-timeout" type="number" min="1" step="1" value="120" /></label>
         <p class="hint">Base URL &amp; models load from the server; the API key comes from
           <code>.env</code> — leave the key blank to use it. Blank base URL + key → offline mock.
-          A local endpoint (e.g. Ollama) needs no key.</p>
+          A local endpoint (e.g. Ollama) needs no key, but CPU inference can be slow — raise the
+          timeout if requests fail with "timed out".</p>
       </form>
     </nav>
 

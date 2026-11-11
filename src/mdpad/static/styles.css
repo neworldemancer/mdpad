@@ -160,7 +160,19 @@ body {
   color: var(--ink-soft);
 }
 
-.outline { list-style: none; margin: 10px 0 0; padding: 0; }
+/* ---- sidebar tabs (Outline / Settings) --------------------------------- */
+.sidebar-tabs { display: flex; gap: 4px; margin: -4px -4px 4px; }
+.sidebar-tab {
+  font-family: var(--font-ui); font-size: 11px; font-weight: 600;
+  letter-spacing: .04em; text-transform: uppercase;
+  padding: 5px 10px; border: 1px solid transparent; border-radius: 999px;
+  background: none; color: var(--ink-soft); cursor: pointer;
+}
+.sidebar-tab:hover { color: var(--ink); }
+.sidebar-tab.active { background: var(--accent-soft); color: var(--accent); }
+.sidebar-pane { margin-top: 12px; }
+
+.outline { list-style: none; margin: 0; padding: 0; }
 .outline li {
   display: flex; align-items: center; gap: 8px;
   padding: 5px 6px;
@@ -186,7 +198,7 @@ body {
 #regen-summaries:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ---- settings --------------------------------------------------------- */
-.settings { margin-top: 22px; display: grid; gap: 10px; }
+.settings:not([hidden]) { display: grid; gap: 10px; }
 .settings label { display: grid; gap: 4px; font-size: 11px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .06em; }
 .settings input, .settings select {
   font-family: var(--font-mono); font-size: 12px;

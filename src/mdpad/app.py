@@ -132,6 +132,7 @@ class ProviderSettings(BaseModel):
     model: str = ""
     temperature: float = 0.3
     max_tokens: int = 1024
+    timeout: float = 120.0  # local CPU inference (e.g. Ollama) can be much slower than a hosted API
 
 
 class ReviseRequest(BaseModel):

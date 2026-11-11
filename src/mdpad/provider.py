@@ -135,7 +135,7 @@ def _chat_completion(*, system: str, user: str, provider: dict) -> str:
             f"{base_url}/chat/completions",
             headers=headers,
             json=payload,
-            timeout=float(provider.get("timeout", 60)),
+            timeout=float(provider.get("timeout", 120)),
         )
         resp.raise_for_status()
         data = resp.json()

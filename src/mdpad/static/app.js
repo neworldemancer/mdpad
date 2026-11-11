@@ -270,6 +270,7 @@ function loadSettings() {
   savedModel = s.model || "";
   $("p-temp").value = s.temperature ?? 0.3;
   $("p-max").value = s.max_tokens ?? 1024;
+  $("p-timeout").value = s.timeout ?? 120;
 }
 function readSettings() {
   return {
@@ -278,6 +279,7 @@ function readSettings() {
     model: $("p-model").value,
     temperature: parseFloat($("p-temp").value) || 0.3,
     max_tokens: parseInt($("p-max").value, 10) || 1024,
+    timeout: parseFloat($("p-timeout").value) || 120,
   };
 }
 function saveSettings() {
@@ -799,8 +801,18 @@ function toastSticky(msg) {
 }
 function hideToast() { $("toast").hidden = true; }
 
-// ---- left sidebar (collapsible, toggled by Settings) --------------------
+// ---- left sidebar: collapsible, with Outline / Settings tabs ------------
 let sidebarOpen = localStorage.getItem("mdpad.sidebarOpen") !== "0";
+let sidebarTab = "outline";
+
+function showSidebarTab(name) {
+  sidebarTab = name;
+  ["outline", "settings"].forEach((t) => {
+    $("sidebar-tab-" + t).classList.toggle("active", t === name);
+    $("sidebar-tab-" + t).setAttribute("aria-selected", String(t === name));
+    $("sidebar-pane-" + t).hidden = t !== name;
+  });
+}
 
 function setSidebar(open) {
   sidebarOpen = open;
@@ -809,7 +821,6 @@ function setSidebar(open) {
   const ws = document.querySelector(".workspace");
   ws.style.setProperty("--w-sidebar", open ? (saved.sidebar || 232) + "px" : "0");
   ws.style.setProperty("--gw-sidebar", open ? "6px" : "0");  // collapse the gutter column too
-  if (open) $("settings").hidden = false;
 }
 
 // ---- summary-context panel ---------------------------------------------
@@ -1021,9 +1032,16 @@ $("custom-instr").addEventListener("keydown", (e) => {
   }
 });
 $("settings-toggle").addEventListener("click", () => {
-  setSidebar(!sidebarOpen);
+  if (sidebarOpen && sidebarTab === "settings") {
+    setSidebar(false);
+  } else {
+    setSidebar(true);
+    showSidebarTab("settings");
+  }
 });
-["p-model", "p-temp", "p-max"].forEach((id) =>
+$("sidebar-tab-outline").addEventListener("click", () => showSidebarTab("outline"));
+$("sidebar-tab-settings").addEventListener("click", () => showSidebarTab("settings"));
+["p-model", "p-temp", "p-max", "p-timeout"].forEach((id) =>
   $(id).addEventListener("change", saveSettings)
 );
 // Changing the endpoint/key re-lists models against it.
