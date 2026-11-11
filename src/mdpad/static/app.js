@@ -77,11 +77,21 @@ async function renderMermaid() {
     const div = document.createElement("div");
     div.className = "mermaid";
     const id = "mermaid-" + (mermaidSeq++);
+    // On a syntax error, mermaid can leave its off-screen measurement
+    // container (and its error-icon SVG) attached directly to <body> instead
+    // of cleaning it up -- outside our .mermaid div, so it's uncloseable and
+    // piles up across errors. Diff body's children so we can strip whatever
+    // it added, regardless of the id/class it used internally.
+    const bodyChildrenBefore = new Set(document.body.children);
     try {
       const { svg } = await window.mermaid.render(id, code.textContent);
       div.innerHTML = svg;
     } catch (e) {
       div.textContent = "Mermaid error: " + e.message;
+    } finally {
+      for (const el of document.body.children) {
+        if (!bodyChildrenBefore.has(el)) el.remove();
+      }
     }
     pre.replaceWith(div);
   }
