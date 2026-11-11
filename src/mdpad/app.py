@@ -260,9 +260,30 @@ def read_file(name: str) -> dict:
     return {"name": name, "text": _current_doc}
 
 
+@app.post("/api/file/new")
+def new_file() -> dict:
+    """Start a fresh, unsaved document. Clears _STORE too -- otherwise a
+    stale summary from whatever was previously open (even the bundled
+    example, if no project was open yet) can leak into this one; see the
+    comment in save_file()."""
+    global _current_doc, _current_name
+    _current_doc = ""
+    _current_name = None
+    summ.reset()
+    return {"ok": True}
+
+
 @app.post("/api/file")
 def save_file(req: SaveRequest) -> dict:
     global _current_doc, _current_name
+    if req.name != _current_name:
+        # Establishing a new document identity we didn't just load via
+        # read_file/_open_project (e.g. "New" -> "Save As") -- _STORE may
+        # still hold a *different* document's cached summaries (section ids
+        # are content-slugs like "model" or the universal "__doc__", so they
+        # collide across unrelated documents). Never let those get persisted
+        # into this file's own sidecar.
+        summ.reset()
     path = _safe_doc_path(req.name)
     path.write_text(req.text, encoding="utf-8")
     _current_doc = req.text

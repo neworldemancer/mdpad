@@ -649,8 +649,12 @@ async function openFile(name) {
   toast("Opened " + name);
 }
 
-function newFile() {
+async function newFile() {
   if (dirty && !confirm("Discard unsaved changes?")) return;
+  // Clears the server's cached summaries too -- otherwise a stale one from
+  // whatever was previously open (even the bundled example) can leak into
+  // this document, since summary ids are content slugs, not document-scoped.
+  try { await fetch("/api/file/new", { method: "POST" }); } catch { /* best-effort */ }
   editor.value = "# Untitled\n\n";
   currentName = null;             // unsaved; Save will prompt for a name
   dirty = false;
